@@ -23,7 +23,8 @@ jobs:
       - name: Tes rilis arsip
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
-        run: gh release view arsip-final -R ohan78/Jota_Content_Factory --json assets -q '.assets | length' | sed 's/^/Aset arsip: /'
+        run: |
+          echo "Aset arsip = $(gh release view arsip-final -R ohan78/Jota_Content_Factory --json assets -q '.assets | length')"
       - name: Tes exit code tetap gagal kalau perintah gagal
         run: |
           false && echo "tidak boleh sampai sini" || echo "pipefail ok"
