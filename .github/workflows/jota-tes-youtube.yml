@@ -1,0 +1,25 @@
+# Uji login YouTube tanpa mengunggah: tukar refresh token, lalu coba baca channel (butuh scope youtube.readonly).
+name: jota-tes-youtube
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+    steps:
+      - name: Tes token
+        run: |
+          for v in YT_CLIENT_ID YT_CLIENT_SECRET YT_REFRESH_TOKEN; do [ -n "${!v}" ] && echo "$v: ada" || echo "$v: KOSONG"; done
+          R=$(curl -s https://oauth2.googleapis.com/token -d client_id="$YT_CLIENT_ID" -d client_secret="$YT_CLIENT_SECRET" -d refresh_token="$YT_REFRESH_TOKEN" -d grant_type=refresh_token)
+          T=$(echo "$R" | jq -r '.access_token // empty')
+          if [ -z "$T" ]; then echo "TOKEN GAGAL: $(echo "$R" | jq -c '{error,error_description}')"; exit 1; fi
+          echo "::add-mask::$T"
+          echo "TOKEN OK, scope: $(echo "$R" | jq -r .scope)"
+          C=$(curl -s -H "Authorization: Bearer $T" "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true")
+          echo "Channel: $(echo "$C" | jq -r '.items[0].snippet.title // .error.message // "tidak terbaca (scope upload saja, tidak apa-apa)"')"
