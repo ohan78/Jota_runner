@@ -1,0 +1,24 @@
+# Uji ElevenLabs dan Drive tanpa membuat suara atau file.
+name: jota-tes-kunci
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - name: ElevenLabs
+        run: |
+          [ -n "$ELEVENLABS_API_KEY" ] || { echo "ELEVENLABS_API_KEY: KOSONG"; exit 0; }
+          C=$(curl -s -o /tmp/v.json -w '%{http_code}' -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/voices)
+          echo "ElevenLabs voices HTTP $C, jumlah suara: $(jq '.voices|length' /tmp/v.json 2>/dev/null)"
+          for n in "JOTA Alif" "JOTA Kang Nandar" "Koharudin" "Putri Maharani"; do jq -r --arg n "$n" '[.voices[]?|select(.name|startswith($n))]|length as $k|"\($n): \(if $k>0 then "ada" else "TIDAK ADA" end)"' /tmp/v.json; done
+      - name: Drive
+        run: |
+          [ -n "$JOTA_DRIVE_URL" ] && echo "JOTA_DRIVE_URL: ada" || echo "JOTA_DRIVE_URL: KOSONG"
+          [ -n "$JOTA_DRIVE_URL" ] && echo "Drive web app HTTP $(curl -s -L -o /dev/null -w '%{http_code}' "$JOTA_DRIVE_URL")" || true
