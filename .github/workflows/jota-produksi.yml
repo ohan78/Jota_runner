@@ -139,7 +139,7 @@ jobs:
           P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
           V=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"-FINAL.mp4 "$JOTA_EXPORT_DIR/$P/$P"*-SUB.mp4 2>/dev/null | head -1); [ -n "$V" ] || V=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"*.mp4 | head -1)
           node upload-youtube.mjs "$V" yt-meta.json
-      - name: Unggah Facebook Reel (DRAFT; dilewati kalau META_PAGE_TOKEN belum ada)
+      - name: Unggah Facebook Reel DRAFT (hanya bila shots.json facebook_draft true; posting tayang lewat jota-posting-harian)
         continue-on-error: true
         env:
           META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
@@ -147,7 +147,7 @@ jobs:
         run: |
           [ -n "$META_PAGE_TOKEN" ] || { echo 'META_PAGE_TOKEN belum diisi; dilewati.'; exit 0; }
           S="../../${{ inputs.shots }}"
-          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if(!d.youtube) process.exit(3); const y=d.youtube; require('fs').writeFileSync('fb-meta.json', JSON.stringify({title:y.title, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S" || { echo 'Tanpa blok youtube; dilewati.'; exit 0; }
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if(!d.youtube || !d.facebook_draft) process.exit(3); const y=d.youtube; require('fs').writeFileSync('fb-meta.json', JSON.stringify({title:y.title, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S" || { echo 'Tanpa blok youtube; dilewati.'; exit 0; }
           P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
           V=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"-FINAL.mp4 "$JOTA_EXPORT_DIR/$P/$P"*-SUB.mp4 2>/dev/null | head -1)
           [ -n "$V" ] && node upload-facebook.mjs "$V" fb-meta.json DRAFT

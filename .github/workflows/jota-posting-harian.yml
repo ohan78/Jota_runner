@@ -1,0 +1,65 @@
+# Posting terjadwal (owner 2026-11-06 05:15): satu video per hari ke YouTube (public), Instagram Reel, dan Facebook Reel.
+# Antrean: apps/videoexpress-runner/antrean-posting.txt di repo privat (satu path shots.json per baris, urut).
+# Video harus sudah ada di arsip FINAL (GitHub Release) dan YouTube (private) dari jota-produksi.
+name: jota-posting-harian
+on:
+  schedule:
+    - cron: '7 12 * * *'   # 19:07 WIB
+  workflow_dispatch:
+    inputs:
+      jumlah: { description: 'berapa video diposting sekarang', required: false, default: '1' }
+permissions:
+  contents: read
+concurrency: { group: jota-posting, cancel-in-progress: false }
+defaults:
+  run:
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|reel/|/p/|[?&]id=|watch[?]v=)[A-Za-z0-9_-]{{10,}}#\1***#g'"
+jobs:
+  posting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+      META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      JUMLAH: ${{ inputs.jumlah || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Posting dari antrean
+        run: |
+          A=apps/videoexpress-runner/antrean-posting.txt
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          for n in $(seq 1 "$JUMLAH"); do
+            git fetch -q origin main && git reset -q --hard origin/main
+            S=$(grep -v '^\s*\(#\|$\)' "$A" 2>/dev/null | head -1 | xargs || true)
+            [ -n "$S" ] || { echo "Antrean posting kosong."; break; }
+            P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+            mkdir -p "/tmp/v/$P"
+            if ! gh release download arsip-final -R ohan78/Jota_Content_Factory -p "$P-FINAL.mp4" -D "/tmp/v/$P" --clobber; then
+              echo "$P: FINAL belum ada di arsip; antrean berhenti (urutan dijaga)."; break
+            fi
+            node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const y=d.youtube||{}; require('fs').writeFileSync('/tmp/meta.json', JSON.stringify({title:y.title||d.project, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S"
+            V="/tmp/v/$P/$P-FINAL.mp4"; HASIL="$P:"
+            node apps/videoexpress-runner/youtube-status.mjs "$S" public && HASIL="$HASIL YouTube public;" || HASIL="$HASIL YouTube GAGAL;"
+            node apps/videoexpress-runner/upload-instagram.mjs "$V" /tmp/meta.json && HASIL="$HASIL Instagram tayang;" || HASIL="$HASIL Instagram GAGAL;"
+            node apps/videoexpress-runner/upload-facebook.mjs "$V" /tmp/meta.json PUBLISHED && HASIL="$HASIL Facebook tayang." || HASIL="$HASIL Facebook GAGAL."
+            echo "$HASIL"
+            [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && curl -s -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=Posting JOTA $HASIL" || true
+            for i in 1 2 3; do
+              git fetch -q origin main && git reset -q --hard origin/main
+              grep -vxF "$S" "$A" > /tmp/sisa || true; cp /tmp/sisa "$A"
+              echo "$(date -u +%F) $S" >> apps/videoexpress-runner/riwayat-posting.txt
+              git add "$A" apps/videoexpress-runner/riwayat-posting.txt && git commit -q -m "Posting: $P" && git push -q origin HEAD:main && break
+              sleep 5
+            done
+          done
