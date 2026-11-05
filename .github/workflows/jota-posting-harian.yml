@@ -10,6 +10,7 @@ on:
       jumlah: { description: 'berapa video diposting sekarang', required: false, default: '1' }
 permissions:
   contents: read
+  actions: write
 concurrency: { group: jota-posting, cancel-in-progress: false }
 defaults:
   run:
@@ -54,6 +55,7 @@ jobs:
             node apps/videoexpress-runner/upload-instagram.mjs "$V" /tmp/meta.json && HASIL="$HASIL Instagram tayang;" || HASIL="$HASIL Instagram GAGAL;"
             node apps/videoexpress-runner/upload-facebook.mjs "$V" /tmp/meta.json PUBLISHED && HASIL="$HASIL Facebook tayang." || HASIL="$HASIL Facebook GAGAL."
             echo "$HASIL"
+            N=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial&&d.serial.dashboard||'')" "$S")
             [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && curl -s -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=Posting JOTA $HASIL" || true
             for i in 1 2 3; do
               git fetch -q origin main && git reset -q --hard origin/main
@@ -62,4 +64,9 @@ jobs:
               git add "$A" apps/videoexpress-runner/riwayat-posting.txt && git commit -q -m "Posting: $P" && git push -q origin HEAD:main && break
               sleep 5
             done
+            # Kompilasi setiap 10 episode yang sudah tayang (owner 05:23).
+            if [ -n "$N" ] && [ -f "$N" ]; then
+              M=$(node apps/videoexpress-runner/kompilasi-cek.mjs "$N" "$S" apps/videoexpress-runner/riwayat-posting.txt || true)
+              [ -n "$M" ] && GH_TOKEN=${{ github.token }} gh workflow run jota-kompilasi.yml -R "$GITHUB_REPOSITORY" -f minggu="$M" -f dashboard="$N" && echo "Kompilasi bagian $M dijadwalkan ($N)"
+            fi
           done

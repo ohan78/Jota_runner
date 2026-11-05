@@ -1,10 +1,11 @@
-# Kompilasi mingguan: 7 episode FINAL dari arsip GitHub Release digabung ffmpeg jadi satu video panjang,
-# tanpa generate ulang. Dijalankan otomatis setelah episode ke-7 tiap minggu selesai, atau manual.
+# Kompilasi per 10 episode (owner 2026-11-06 05:23; dashboard kompilasi_per): FINAL dari arsip GitHub Release digabung
+# ffmpeg jadi satu video panjang tanpa generate ulang, tayang terjadwal Sabtu 09:07 WIB. Dipicu jota-posting-harian
+# setelah episode ke-10 suatu bagian tayang, atau manual.
 name: jota-kompilasi
 on:
   workflow_dispatch:
     inputs:
-      minggu: { description: 'nomor minggu (1 = hari 1-7)', required: true }
+      minggu: { description: 'nomor bagian (1 = episode 1-10)', required: true }
       dashboard: { description: 'path dashboard.json serial', required: false, default: 'skills/jota-video/playbooks/faceless-family-stories/series/30-HARI-UWAIS-HIJRAH/dashboard.json' }
 permissions:
   contents: write

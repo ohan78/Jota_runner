@@ -209,8 +209,7 @@ jobs:
             git commit -q -m "Dasbor serial diperbarui" && git push -q origin HEAD:main && break
             sleep 5
           done
-          M=$(node apps/videoexpress-runner/kompilasi-cek.mjs "$N" "$S" || true)
-          [ -n "$M" ] && GH_TOKEN=${{ github.token }} gh workflow run jota-kompilasi.yml -R "$GITHUB_REPOSITORY" -f minggu="$M" -f dashboard="$N" && echo "Kompilasi minggu $M dijadwalkan"
+          # Kompilasi dipicu jota-posting-harian setelah 10 episode tayang (owner 2026-11-06 05:23).
           mkdir -p /tmp/dash && cp "$N" /tmp/dash/jota-dashboard.json
           node apps/videoexpress-runner/upload-drive.mjs /tmp/dash _DASHBOARD
       - name: Antrean berikutnya (apps/videoexpress-runner/antrean.txt)
