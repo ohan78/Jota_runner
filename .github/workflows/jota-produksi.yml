@@ -52,7 +52,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: ffprobe untuk cek rasio export
-        run: sudo apt-get install -y -qq ffmpeg >/dev/null
+        timeout-minutes: 10
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null
       - name: Gambar acuan tokoh (sekali per tokoh)
         run: |
           node runner.mjs ref "../../${{ inputs.shots }}"

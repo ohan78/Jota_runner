@@ -37,7 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: sudo apt-get install -y -qq ffmpeg >/dev/null && pip install -q faster-whisper >/dev/null
+      - timeout-minutes: 10
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null && pip install -q faster-whisper >/dev/null
       - run: |
           mkdir -p out && curl -sSL -o "out/${{ inputs.nama }}.mp4" "${{ inputs.url }}"
           JOTA_TITLE="${{ inputs.judul }}" python3 subtitle.py "out/${{ inputs.nama }}.mp4"

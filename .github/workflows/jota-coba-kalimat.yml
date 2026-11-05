@@ -26,5 +26,6 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: sudo apt-get install -y -qq ffmpeg >/dev/null
+      - timeout-minutes: 10
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null
       - run: node apps/videoexpress-runner/coba-kalimat.mjs "$TOKOH" /tmp/co "$KALIMAT" && node apps/videoexpress-runner/upload-drive.mjs /tmp/co _COBA-KALIMAT
