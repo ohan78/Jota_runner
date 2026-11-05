@@ -1,8 +1,8 @@
-# Foto acuan dari bot Telegram ke Drive "Referensi JOTA", dicek tiap 15 menit. Log hanya jumlah foto.
+# Foto acuan dari bot Telegram ke Drive "Referensi JOTA", dicek tiap 5 menit. Log hanya jumlah foto.
 name: jota-telegram-ref
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
