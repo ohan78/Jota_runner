@@ -18,7 +18,7 @@ permissions:
 defaults:
   run:
     # Repo publik: ID file Drive dan video YouTube disamarkan di log.
-    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{{10,}}#\1***#g'"
 jobs:
   fb:
     runs-on: ubuntu-latest
