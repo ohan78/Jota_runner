@@ -1,0 +1,41 @@
+# Instagram Reel dari arsip FINAL. Instagram tidak punya draft lewat API: mode posting LANGSUNG TAYANG,
+# jadi hanya dijalankan atas perintah owner. Mode cek hanya memeriksa token dan akun.
+name: jota-instagram
+on:
+  workflow_dispatch:
+    inputs:
+      mode: { description: 'cek atau posting', required: true, default: 'cek' }
+      shots: { description: 'untuk posting: path shots.json, dipisah koma', required: false, default: '' }
+permissions:
+  contents: read
+jobs:
+  ig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+      META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+      DAFTAR: ${{ inputs.shots }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Cek
+        if: ${{ inputs.mode == 'cek' }}
+        run: node apps/videoexpress-runner/upload-instagram.mjs cek
+      - name: Posting
+        if: ${{ inputs.mode == 'posting' }}
+        run: |
+          IFS=',' read -ra L <<< "$DAFTAR"
+          for S in "${L[@]}"; do
+            S=$(echo "$S" | xargs)
+            P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+            mkdir -p "/tmp/i/$P"
+            gh release download arsip-final -R ohan78/Jota_Content_Factory -p "$P-FINAL.mp4" -D "/tmp/i/$P" --clobber || { echo "$P: FINAL tidak ada"; continue; }
+            node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const y=d.youtube||{}; require('fs').writeFileSync('/tmp/ig.json', JSON.stringify({title:y.title||d.project, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S"
+            node apps/videoexpress-runner/upload-instagram.mjs "/tmp/i/$P/$P-FINAL.mp4" /tmp/ig.json || echo "$P: Instagram gagal"
+          done
