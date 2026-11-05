@@ -1,0 +1,156 @@
+# Rakit ulang tanpa generate VideoExpress: ambil MP4 bernarasi dari artifact run jota-produksi sebelumnya,
+# lalu ulang subtitle (dengan kartu hadis), Remotion intro/outro, unggah YouTube private, Drive, dan dasbor.
+name: jota-rakit-ulang
+on:
+  workflow_dispatch:
+    inputs:
+      shots: { description: 'path shots.json dari root repo', required: true }
+      run_id: { description: 'ID run jota-produksi sumber (artifact hasil)', required: true }
+      narasi_ulang: { description: 'ulang narasi tokoh dari versi TANPA-NARASI (true/false)', required: false, default: 'false' }
+      ganti_shot: { description: 'ganti satu shot, misal SHOT01 (kosong = tidak)', required: false, default: '' }
+      ganti_run_id: { description: 'ID run jota-produksi proyek satu-shot pengganti', required: false, default: '' }
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: jota-produksi
+  cancel-in-progress: false
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  rakit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      JOTA_EXPORT_DIR: ${{ github.workspace }}/out
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    defaults:
+      run:
+        working-directory: apps/videoexpress-runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: sudo apt-get install -y -qq ffmpeg >/dev/null
+      - uses: actions/download-artifact@v4
+        with:
+          name: hasil
+          path: /tmp/hasil
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: inputs.ganti_shot != ''
+        with:
+          name: hasil
+          path: /tmp/ganti
+          run-id: ${{ inputs.ganti_run_id }}
+          github-token: ${{ github.token }}
+      - name: Siapkan folder proyek
+        run: |
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          mkdir -p "$JOTA_EXPORT_DIR"
+          cp -r "/tmp/hasil/out/$P" "$JOTA_EXPORT_DIR/$P"
+          rm -f "$JOTA_EXPORT_DIR/$P"/*-SUB.mp4 "$JOTA_EXPORT_DIR/$P"/*-FINAL.mp4 "$JOTA_EXPORT_DIR/$P"/*-YOUTUBE.txt "$JOTA_EXPORT_DIR/$P"/*.srt
+          ls -la "$JOTA_EXPORT_DIR/$P"
+      - name: Ganti satu shot (tanpa generate ulang shot lain)
+        if: inputs.ganti_shot != ''
+        env:
+          G: ${{ inputs.ganti_shot }}
+        run: |
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          D="$JOTA_EXPORT_DIR/$P"; T="$D/$P-TANPA-NARASI.mp4"; [ -f "$T" ] || T="$D/$P.mp4"
+          N=$(find /tmp/ganti -name '*-TANPA-NARASI.mp4' | head -1); [ -n "$N" ] || N=$(find /tmp/ganti/out -name 'JOTA-*.mp4' ! -name '*-SUB*' ! -name '*-FINAL*' | head -1)
+          PETA=$(ls -t "$D"/PETA-WAKTU*.txt | head -1)
+          read A B < <(python3 -c "import re,sys;g=sys.argv[2];[print(int(m[1])*60+int(m[2]),int(m[3])*60+int(m[4])) for m in [re.search(r'(\d+):(\d+)-(\d+):(\d+)\s+\S*'+g+r'\b',l) for l in open(sys.argv[1])] if m]" "$PETA" "$G" | head -1)
+          echo "Ganti $G detik $A-$B dengan $N"
+          V="scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p"
+          E="-c:v libx264 -preset veryfast -crf 18 -c:a aac -ar 48000 -ac 2"
+          ffmpeg -y -v error -i "$T" -t "$A" -vf "$V" $E /tmp/a.mp4 || true
+          ffmpeg -y -v error -i "$N" -t "$((B-A))" -vf "$V" $E /tmp/b.mp4
+          ffmpeg -y -v error -ss "$B" -i "$T" -vf "$V" $E /tmp/c.mp4
+          : > /tmp/list.txt; for x in /tmp/a.mp4 /tmp/b.mp4 /tmp/c.mp4; do [ -s "$x" ] && [ "$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$x" | cut -d. -f1)" != "" ] && echo "file '$x'" >> /tmp/list.txt; done
+          [ "$A" = "0" ] && sed -i "/a.mp4/d" /tmp/list.txt
+          ffmpeg -y -v error -f concat -safe 0 -i /tmp/list.txt -c copy "/tmp/baru.mp4"
+          cp /tmp/baru.mp4 "$D/$P-TANPA-NARASI.mp4"; cp /tmp/baru.mp4 "$D/$P.mp4"
+          ffprobe -v error -show_entries format=duration -of csv=p=0 "$D/$P.mp4"
+      - name: Narasi tokoh ulang (opsional)
+        if: inputs.narasi_ulang == 'true' || inputs.ganti_shot != ''
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          npm ci --ignore-scripts >/dev/null
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          T=$(ls "$JOTA_EXPORT_DIR/$P/$P"-TANPA-NARASI.mp4)
+          cp "$T" "$JOTA_EXPORT_DIR/$P/$P.mp4" && rm -f "$T"
+          # progress.json tidak ikut artifact; bangun dari PETA-WAKTU (shot yang masuk timeline dan durasinya).
+          PETA=$(ls -t "$JOTA_EXPORT_DIR/$P"/PETA-WAKTU*.txt | head -1)
+          node -e "const fs=require('fs');const sh={};for(const l of fs.readFileSync(process.argv[1],'utf8').split('\n')){const m=l.match(/(\d+):(\d+)-(\d+):(\d+)\s+\S*?(SHOT\d+)/);if(m)sh[m[5]]={clip_url:'arsip',duration:(+m[3]*60+ +m[4])-(+m[1]*60+ +m[2])};}fs.writeFileSync(process.argv[2],JSON.stringify({shots:sh}));console.log(sh)" "$PETA" "$(dirname "../../${{ inputs.shots }}")/progress.json"
+          node narasi-tokoh.mjs "../../${{ inputs.shots }}" "$JOTA_EXPORT_DIR/$P/$P.mp4"
+      - name: Subtitle dan kartu hadis
+        run: |
+          pip install -q faster-whisper >/dev/null
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          f="$JOTA_EXPORT_DIR/$P/$P.mp4"
+          PETA=$(ls -t "$JOTA_EXPORT_DIR/$P"/PETA-WAKTU*.txt 2>/dev/null | head -1)
+          JOTA_HADIS=$(node hadis-waktu.mjs "../../${{ inputs.shots }}" "$PETA" || echo '[]') \
+          JOTA_TITLE=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial?'':(d.title_card||''))" "../../${{ inputs.shots }}") python3 subtitle.py "$f"
+      - name: Intro dan outro Remotion (serial)
+        run: |
+          S="../../${{ inputs.shots }}"
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if(!d.serial) process.exit(3); require('fs').writeFileSync('/tmp/serial.json', JSON.stringify(d.serial))" "$S" || { echo 'Bukan serial; dilewati.'; exit 0; }
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+          V=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"*-SUB.mp4 2>/dev/null | head -1); [ -n "$V" ] || V="$JOTA_EXPORT_DIR/$P/$P.mp4"
+          (cd ../jota-remotion && npm install --no-audit --no-fund >/dev/null)
+          bash ../jota-remotion/bungkus.sh "$V" /tmp/serial.json "$JOTA_EXPORT_DIR/$P/$P-FINAL.mp4"
+      - name: Arsip FINAL ke GitHub Release (untuk kompilasi mingguan tanpa generate ulang)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          F="$JOTA_EXPORT_DIR/$P/$P-FINAL.mp4"; [ -f "$F" ] || F=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"*-SUB.mp4 2>/dev/null | head -1)
+          [ -n "$F" ] && [ -f "$F" ] || { echo 'Tidak ada FINAL; dilewati.'; exit 0; }
+          gh release view arsip-final -R "ohan78/Jota_Content_Factory" >/dev/null 2>&1 || gh release create arsip-final -R "ohan78/Jota_Content_Factory" --prerelease --title "Arsip FINAL" --notes "MP4 final per episode, bahan kompilasi mingguan."
+          cp "$F" "/tmp/$P-FINAL.mp4" && gh release upload arsip-final "/tmp/$P-FINAL.mp4" -R "ohan78/Jota_Content_Factory" --clobber && echo "Arsip: $P-FINAL.mp4"
+      - name: Unggah YouTube (private)
+        continue-on-error: true
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: |
+          S="../../${{ inputs.shots }}"
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); if(!d.youtube) process.exit(3); require('fs').writeFileSync('yt-meta.json', JSON.stringify(d.youtube))" "$S" || { echo 'Tanpa blok youtube; dilewati.'; exit 0; }
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+          V=$(ls -t "$JOTA_EXPORT_DIR/$P/$P"-FINAL.mp4 "$JOTA_EXPORT_DIR/$P/$P"*-SUB.mp4 2>/dev/null | head -1); [ -n "$V" ] || V="$JOTA_EXPORT_DIR/$P/$P.mp4"
+          node upload-youtube.mjs "$V" yt-meta.json
+      - name: Unggah ke Drive dan perbarui dasbor
+        working-directory: .
+        run: |
+          S="${{ inputs.shots }}"
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+          d="$JOTA_EXPORT_DIR/$P"
+          : > /tmp/unggah.log
+          F=$(ls "$d"/*-FINAL.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d"/*-SUB.mp4 2>/dev/null | head -1)
+          mkdir -p /tmp/up; for f in $F "$d"/*.srt "$d"/*-YOUTUBE.txt; do [ -f "$f" ] && cp "$f" /tmp/up/; done
+          node apps/videoexpress-runner/upload-drive.mjs /tmp/up "$P" | tee -a /tmp/unggah.log || true
+          cat "$d"/*-YOUTUBE.txt 2>/dev/null | sed 's/^/YouTube: /' >> /tmp/unggah.log || true
+          N=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial&&d.serial.dashboard||'')" "$S")
+          [ -n "$N" ] || exit 0
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          for i in 1 2 3; do
+            git fetch -q origin main && git reset -q --hard origin/main
+            node apps/videoexpress-runner/dashboard.mjs "$S" /tmp/unggah.log "$N"
+            git add "$N"; git diff --cached --quiet && break
+            git commit -q -m "Dasbor serial diperbarui" && git push -q origin HEAD:main && break
+            sleep 5
+          done
+          M=$(node apps/videoexpress-runner/kompilasi-cek.mjs "$N" "$S" || true)
+          [ -n "$M" ] && GH_TOKEN=${{ github.token }} gh workflow run jota-kompilasi.yml -R "$GITHUB_REPOSITORY" -f minggu="$M" -f dashboard="$N" && echo "Kompilasi minggu $M dijadwalkan"
+          mkdir -p /tmp/dash && cp "$N" /tmp/dash/jota-dashboard.json
+          node apps/videoexpress-runner/upload-drive.mjs /tmp/dash _DASHBOARD

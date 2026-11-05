@@ -1,0 +1,66 @@
+# Kompilasi mingguan: 7 episode FINAL dari arsip GitHub Release digabung ffmpeg jadi satu video panjang,
+# tanpa generate ulang. Dijalankan otomatis setelah episode ke-7 tiap minggu selesai, atau manual.
+name: jota-kompilasi
+on:
+  workflow_dispatch:
+    inputs:
+      minggu: { description: 'nomor minggu (1 = hari 1-7)', required: true }
+      dashboard: { description: 'path dashboard.json serial', required: false, default: 'skills/jota-video/playbooks/faceless-family-stories/series/30-HARI-UWAIS-HIJRAH/dashboard.json' }
+permissions:
+  contents: write
+concurrency:
+  group: jota-kompilasi
+  cancel-in-progress: false
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  gabung:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      M: ${{ inputs.minggu }}
+      N: ${{ inputs.dashboard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Unduh 7 FINAL dari arsip
+        run: |
+          mkdir -p /tmp/k/src
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const m=+process.argv[2];for(const e of d.episodes) if(e.hari>(m-1)*7&&e.hari<=m*7) console.log(e.project)" "$N" "$M" | while read P; do
+            gh release download arsip-final -R "ohan78/Jota_Content_Factory" -p "$P-FINAL.mp4" -D /tmp/k/src --clobber && echo "unduh $P"
+          done
+          ls -la /tmp/k/src
+      - name: Gabung dengan ffmpeg
+        run: node apps/videoexpress-runner/kompilasi.mjs "$N" "$M" /tmp/k
+      - name: Unggah YouTube (private, video panjang)
+        continue-on-error: true
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: node apps/videoexpress-runner/upload-youtube.mjs /tmp/k/KOMPILASI-*.mp4 /tmp/k/meta.json
+      - name: Unggah Drive dan catat di dasbor
+        run: |
+          mkdir -p /tmp/up && cp /tmp/k/KOMPILASI-*.mp4 /tmp/k/KOMPILASI-*-YOUTUBE.txt /tmp/up/ 2>/dev/null || true
+          NAMA=$(basename /tmp/k/KOMPILASI-*.mp4 .mp4)
+          node apps/videoexpress-runner/upload-drive.mjs /tmp/up "$NAMA" | tee /tmp/unggah.log || true
+          YT=$(head -1 /tmp/k/KOMPILASI-*-YOUTUBE.txt 2>/dev/null || true)
+          DR=$(grep -o 'https://drive[^ ]*' /tmp/unggah.log | head -1 | sed 's/?usp=drivesdk//')
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          for i in 1 2 3; do
+            git fetch -q origin main && git reset -q --hard origin/main
+            node -e "const fs=require('fs');const [f,m,yt,dr]=process.argv.slice(1);const d=JSON.parse(fs.readFileSync(f,'utf8'));d.kompilasi=d.kompilasi||{};d.kompilasi[m]={youtube:yt||'',drive:dr||'',updated:new Date().toISOString()};fs.writeFileSync(f,JSON.stringify(d,null,2)+'\n')" "$N" "$M" "$YT" "$DR"
+            git add "$N"; git diff --cached --quiet && break
+            git commit -q -m "Kompilasi minggu $M" && git push -q origin HEAD:main && break
+            sleep 5
+          done
+          echo "Kompilasi minggu $M: YouTube $YT | Drive $DR"

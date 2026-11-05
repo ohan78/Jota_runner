@@ -1,0 +1,55 @@
+# Unggah FINAL dari arsip GitHub Release ke YouTube (private) tanpa produksi ulang; untuk episode yang tertunda
+# karena batas unggah harian. Input: beberapa path shots.json dipisah koma, diunggah berurutan.
+name: jota-youtube-arsip
+on:
+  workflow_dispatch:
+    inputs:
+      shots: { description: 'path shots.json, dipisah koma', required: true }
+permissions:
+  contents: write
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  unggah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      DAFTAR: ${{ inputs.shots }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Unggah satu per satu
+        run: |
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          IFS=',' read -ra L <<< "$DAFTAR"
+          for S in "${L[@]}"; do
+            S=$(echo "$S" | xargs)
+            P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+            mkdir -p "/tmp/y/$P"
+            gh release download arsip-final -R "ohan78/Jota_Content_Factory" -p "$P-FINAL.mp4" -D "/tmp/y/$P" --clobber || { echo "$P: FINAL tidak ada di arsip"; continue; }
+            node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); require('fs').writeFileSync('/tmp/yt.json', JSON.stringify(d.youtube||{title:d.project}))" "$S"
+            node apps/videoexpress-runner/upload-youtube.mjs "/tmp/y/$P/$P-FINAL.mp4" /tmp/yt.json || { echo "$P: unggah gagal"; continue; }
+            cat "/tmp/y/$P/$P-FINAL-YOUTUBE.txt" | sed 's/^/YouTube: /' > /tmp/log.txt
+            node apps/videoexpress-runner/upload-drive.mjs "/tmp/y/$P" "$P" >/dev/null 2>&1 || true
+            N=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial&&d.serial.dashboard||'')" "$S")
+            if [ -n "$N" ]; then
+              for i in 1 2 3; do
+                git fetch -q origin main && git reset -q --hard origin/main
+                node apps/videoexpress-runner/dashboard.mjs "$S" /tmp/log.txt "$N"
+                git add "$N"; git diff --cached --quiet && break
+                git commit -q -m "Dasbor: YouTube $P" && git push -q origin HEAD:main && break
+                sleep 5
+              done
+            fi
+          done

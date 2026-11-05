@@ -1,0 +1,43 @@
+# Uji intro dan outro Remotion: bungkus satu video (URL MP4), hasil ke Drive "Video JOTA/UJI-REMOTION/".
+name: jota-remotion-uji
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL MP4 episode (kosong = video uji buatan)'
+        required: false
+        default: ''
+      props:
+        description: 'JSON props (serial, hari, total, judul, besok)'
+        required: false
+        default: '{"serial":"30 HARI UWAIS HIJRAH","hari":1,"total":30,"judul":"Azan vs Satu Ronde Lagi","pesan":"Shalat tepat waktu, amalan paling dicintai Allah"}'
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  uji:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      JOTA_DRIVE_ROOT: uji
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get install -y -qq ffmpeg fonts-dejavu >/dev/null
+      - working-directory: apps/jota-remotion
+        run: npm install --no-audit --no-fund >/dev/null
+      - run: |
+          mkdir -p out
+          if [ -n "${{ inputs.url }}" ]; then curl -sSL -o /tmp/ep.mp4 "${{ inputs.url }}"; else ffmpeg -v error -f lavfi -i "testsrc2=s=1080x1920:r=30:d=12" -f lavfi -i "sine=d=12" -shortest -c:v libx264 -preset veryfast -c:a aac /tmp/ep.mp4; fi
+          printf '%s' '${{ inputs.props }}' > /tmp/props.json
+          bash apps/jota-remotion/bungkus.sh /tmp/ep.mp4 /tmp/props.json out/UJI-REMOTION-INTRO-OUTRO.mp4
+          for t in 1 10.5 11.5; do ffmpeg -v error -ss $t -i out/UJI-REMOTION-INTRO-OUTRO.mp4 -frames:v 1 -vf scale=360:-1 out/frame-$t.png; done
+          time true
+          node apps/videoexpress-runner/upload-drive.mjs out UJI-REMOTION

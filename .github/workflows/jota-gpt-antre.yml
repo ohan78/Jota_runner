@@ -1,0 +1,67 @@
+# Antrean produksi dari ChatGPT/Codex (folder gpt/productions/).
+# Push yang mengubah brief.json atau shots.json dengan "auto": true: brief.json dibangun menjadi shots.json lengkap,
+# divalidasi, di-commit, lalu dikirim ke jota-produksi (antre lewat concurrency, tidak bentrok dengan Claude).
+name: jota-gpt-antre
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: 'folder produksi, misalnya gpt/productions/JOTA-M1-UMMI-HEBAT-H00-20261103'
+        required: true
+permissions:
+  contents: write
+  actions: write
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  antre:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pasang dependensi Runner
+        working-directory: apps/videoexpress-runner
+        run: npm ci --ignore-scripts
+      - name: Bangun, validasi, dan masukkan antrean
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          BEFORE: ${{ github.event.before }}
+          FOLDER: ${{ inputs.folder }}
+        run: |
+          set -e
+          if [ -n "$FOLDER" ]; then
+            DIRS="$FOLDER"
+          elif git cat-file -e "$BEFORE" 2>/dev/null; then
+            DIRS=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- 'gpt/productions/' | grep -E '/(brief|shots)\.json$' | xargs -r -n1 dirname | sort -u)
+          else
+            DIRS=$(git ls-files 'gpt/productions/' | grep -E '/(brief|shots)\.json$' | xargs -r -n1 dirname | sort -u)
+          fi
+          n=0
+          for d in $DIRS; do
+            case "$d" in *CONTOH*) echo "$d: contoh, dilewati"; continue;; esac
+            src="$d/shots.json"; [ -f "$d/brief.json" ] && src="$d/brief.json"
+            AUTO=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).auto===true)" "$src")
+            [ "$AUTO" = "true" ] || { echo "$d: auto false, dilewati"; continue; }
+            n=$((n+1))
+            [ "$n" -le 1 ] || { echo "Lebih dari satu produksi auto dalam satu push; $d tidak dikirim."; continue; }
+            if [ -f "$d/brief.json" ]; then
+              (cd apps/videoexpress-runner && node dari-brief.mjs "../../$d/brief.json")
+            fi
+            (cd apps/videoexpress-runner && node runner.mjs plan "../../$d/shots.json")
+            if ! git diff --quiet -- "$d/shots.json" || ! git ls-files --error-unmatch "$d/shots.json" >/dev/null 2>&1; then
+              git config user.name "JOTA Runner"; git config user.email "runner@jota.local"
+              git add "$d/shots.json"; git commit -m "Antrean GPT: shots.json dibangun dari brief ($d)"
+              for i in 1 2 3; do git pull --rebase -q origin main && git push -q origin HEAD:main && break; sleep 5; done
+            fi
+            GH_TOKEN=${{ github.token }} gh workflow run jota-produksi.yml -f shots="$d/shots.json"
+            echo "Masuk antrean: $d"
+          done

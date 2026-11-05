@@ -1,0 +1,26 @@
+# Cek arah unggahan Drive (owner 2026-11-04): satu file teks kecil ke "3. Uji JOTA" dan "2. Artistly JOTA".
+name: jota-drive-cek
+on:
+  workflow_dispatch:
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  cek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          mkdir -p /tmp/cek && echo "Cek arah unggahan $(date -u)" > /tmp/cek/CEK-ARAH-UNGGAH.txt
+          JOTA_DRIVE_ROOT=uji node apps/videoexpress-runner/upload-drive.mjs /tmp/cek _CEK-DRIVE
+          JOTA_DRIVE_ROOT=artistly node apps/videoexpress-runner/upload-drive.mjs /tmp/cek _CEK-DRIVE

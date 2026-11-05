@@ -1,0 +1,29 @@
+# Cari suara di pustaka ElevenLabs, pratinjau ke Drive "Video JOTA/_CARI-SUARA/".
+name: jota-cari-suara
+on:
+  workflow_dispatch:
+    inputs:
+      kata:
+        description: 'nama atau kata kunci suara'
+        required: true
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  cari:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      JOTA_DRIVE_ROOT: uji
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node apps/videoexpress-runner/cari-suara.mjs "${{ inputs.kata }}" /tmp/cs && node apps/videoexpress-runner/upload-drive.mjs /tmp/cs _CARI-SUARA

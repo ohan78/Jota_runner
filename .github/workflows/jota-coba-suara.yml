@@ -1,0 +1,29 @@
+# Coba satu suara pustaka ElevenLabs untuk tokoh anak, ke Drive "Video JOTA/_COBA-SUARA/".
+name: jota-coba-suara
+on:
+  workflow_dispatch:
+    inputs:
+      owner: { description: 'public owner id', required: true }
+      voice: { description: 'voice id', required: true }
+      nama: { description: 'nama pendek suara', required: true }
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  coba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      JOTA_DRIVE_ROOT: uji
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: sudo apt-get install -y -qq ffmpeg >/dev/null
+      - run: node apps/videoexpress-runner/coba-suara.mjs "${{ inputs.owner }}" "${{ inputs.voice }}" "${{ inputs.nama }}" /tmp/co && node apps/videoexpress-runner/upload-drive.mjs /tmp/co _COBA-SUARA

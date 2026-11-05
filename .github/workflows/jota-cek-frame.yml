@@ -1,0 +1,38 @@
+# Lembar frame dari MP4 hasil satu run jota-produksi (artifact "hasil"), untuk diperiksa agen atas permintaan owner.
+# Menulis evals/_CEK-FRAME/<run>.jpg (1 frame per detik, 6 kolom) ke repo. Tidak membuat video atau memakai kredit.
+name: jota-cek-frame
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: { description: 'ID run jota-produksi', required: true }
+permissions:
+  contents: write
+  actions: read
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  frame:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: hasil
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: /tmp/hasil
+      - run: |
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          ls -laR /tmp/hasil | head -40
+          V=$(find /tmp/hasil -name '*.mp4' ! -name '*-SUB*' ! -name '*-FINAL*' ! -name '*TANPA*' | head -1); echo "video: $V"
+          mkdir -p skills/jota-video/evals/_CEK-FRAME
+          ffmpeg -v error -i "$V" -vf "fps=1,scale=240:-1,drawtext=text='%{pts\:hms}':x=4:y=4:fontsize=18:fontcolor=yellow:box=1:boxcolor=black,tile=6x9" -frames:v 1 "skills/jota-video/evals/_CEK-FRAME/${{ inputs.run_id }}.jpg"
+          ffprobe -v error -show_entries format=duration -of csv=p=0 "$V"
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          git add skills/jota-video/evals/_CEK-FRAME && git commit -q -m "Lembar frame run ${{ inputs.run_id }}" && git pull -q --rebase && git push -q

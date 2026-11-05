@@ -1,0 +1,35 @@
+# Sinkron produksi ke Google Sheet episode (v3.99.4). "tulis": repo -> Sheet (STORYBOARD, IMAGE_QC, RUNNER_MANIFEST).
+# "ambil": persetujuan owner di Sheet (IMAGE_QC, OWNER DECISION = APPROVED) -> awal/qc.json. Butuh drive-upload.gs terbaru.
+name: jota-sheet-sync
+on:
+  workflow_dispatch:
+    inputs:
+      shots: { description: 'path shots.json dari root repo', required: true }
+      mode: { description: 'tulis atau ambil', required: true, default: 'tulis' }
+permissions:
+  contents: write
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  sinkron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node apps/videoexpress-runner/sheet-sync.mjs "${{ inputs.mode }}" "${{ inputs.shots }}"
+      - name: Simpan sheet.json dan qc.json
+        run: |
+          D="$(dirname "${{ inputs.shots }}")"
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          git add "$D/sheet.json" "$D/awal/qc.json" 2>/dev/null || true
+          git diff --cached --quiet || (git commit -q -m "Sheet sync ${{ inputs.mode }} $(basename "$D")" && git pull -q --rebase && git push -q)

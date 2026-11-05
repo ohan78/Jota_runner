@@ -1,0 +1,58 @@
+# Unggah hasil satu run produksi ke YouTube (private) tanpa produksi ulang. Butuh artifact "hasil" run itu (umur 1 hari).
+name: jota-youtube-unggah
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'ID run jota-produksi'
+        required: true
+      shots:
+        description: 'path shots.json (blok "youtube" dipakai sebagai judul dan deskripsi)'
+        required: true
+permissions:
+  contents: write
+  actions: read
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  unggah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: hasil
+          path: hasil
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - run: |
+          S="${{ inputs.shots }}"
+          node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));require('fs').writeFileSync('yt-meta.json',JSON.stringify(d.youtube||{title:d.project}))" "$S"
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+          V=$(ls hasil/out/$P/$P-FINAL.mp4 2>/dev/null || ls hasil/out/$P/$P-SUB.mp4 2>/dev/null || ls hasil/out/$P/$P.mp4)
+          node apps/videoexpress-runner/upload-youtube.mjs "$V" yt-meta.json | tee /tmp/yt.log
+          N=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial&&d.serial.dashboard||'')" "$S")
+          if [ -n "$N" ] && grep -q youtube.com /tmp/yt.log; then
+            git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+            for i in 1 2 3; do
+              git fetch -q origin main && git reset -q --hard origin/main
+              node apps/videoexpress-runner/dashboard.mjs "$S" /tmp/yt.log "$N" youtube
+              git add "$N"; git diff --cached --quiet && break
+              git commit -q -m "Dasbor: YouTube" && git push -q origin HEAD:main && break
+            done
+            mkdir -p /tmp/dash && cp "$N" /tmp/dash/jota-dashboard.json && node apps/videoexpress-runner/upload-drive.mjs /tmp/dash _DASHBOARD
+          fi

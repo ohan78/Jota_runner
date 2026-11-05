@@ -1,0 +1,85 @@
+# Uji: apakah Runner bisa mengoperasikan VideoExpress dari server GitHub (tanpa laptop).
+# login = cek login dan dialog Create tanpa membuat apa pun; shot = kirim satu shot uji 5 detik (1 kredit).
+name: jota-runner-uji
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'login, ui, ff, narasi, peta, fix, atau shot'
+        required: true
+        default: 'login'
+      label:
+        description: 'untuk fix: label klip, misal UWAIS01F-SHOT03'
+        required: false
+        default: ''
+      jenis:
+        description: 'untuk fix: Fix Physics, Fix Quality, Fix Subtitles, atau Use v3 Model'
+        required: false
+        default: 'Fix Physics'
+permissions:
+  contents: write
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  uji:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JOTA_CI: '1'
+      JOTA_CHANNEL: ''
+      JOTA_SESSION_FILE: ${{ github.workspace }}/apps/videoexpress-runner/vx-session.json
+      VX_EMAIL: ${{ secrets.VX_EMAIL }}
+      VX_PASSWORD: ${{ secrets.VX_PASSWORD }}
+    defaults:
+      run:
+        working-directory: apps/videoexpress-runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Sesi login
+        env:
+          VX_SESSION: ${{ secrets.VX_SESSION }}
+        run: printf '%s' "$VX_SESSION" > vx-session.json
+      - name: Cek IP server
+        run: curl -s https://ipinfo.io/json | grep -E '"(ip|org|country)"' || true
+      - name: Uji login
+        run: node runner.mjs uji-login
+      - name: Uji UI consistent character
+        if: ${{ inputs.mode == 'ui' }}
+        run: node runner.mjs uji-ui
+      - name: Uji alat First Frame, Last Frame
+        if: ${{ inputs.mode == 'ff' }}
+        run: node runner.mjs uji-ff
+      - name: Uji narasi
+        if: ${{ inputs.mode == 'narasi' }}
+        run: node runner.mjs uji-narasi
+      - name: Peta fitur VideoExpress (hanya membaca)
+        if: ${{ inputs.mode == 'peta' }}
+        run: |
+          node runner.mjs uji-peta
+          cp uji-github/PETA_UI.md ../../skills/videoexpress-runner/PETA_UI.md
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add skills/videoexpress-runner/PETA_UI.md
+          git commit -m "Peta UI VideoExpress diperbarui" || true
+          git pull --rebase -q && git push -q || true
+      - name: Fix Video atas perintah owner
+        if: ${{ inputs.mode == 'fix' }}
+        run: node runner.mjs fix "${{ inputs.label }}" "${{ inputs.jenis }}"
+      - name: Uji satu shot
+        if: ${{ inputs.mode == 'shot' }}
+        run: |
+          node runner.mjs run ../../skills/jota-video/evals/UJI-GITHUB-20261101/shots.json
+          cat ../../skills/jota-video/evals/UJI-GITHUB-20261101/progress.json || true
+      - name: Hapus sesi
+        if: always()
+        run: rm -f vx-session.json

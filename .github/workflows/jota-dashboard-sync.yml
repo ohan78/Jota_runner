@@ -1,0 +1,28 @@
+# Unggah dashboard.json serial dari repo ke Drive "Video JOTA/_DASHBOARD/jota-dashboard.json".
+name: jota-dashboard-sync
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'path dashboard.json'
+        required: true
+        default: 'skills/jota-video/playbooks/faceless-family-stories/series/30-HARI-UWAIS-HIJRAH/dashboard.json'
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: mkdir -p /tmp/dash && cp "${{ inputs.file }}" /tmp/dash/jota-dashboard.json && node apps/videoexpress-runner/upload-drive.mjs /tmp/dash _DASHBOARD

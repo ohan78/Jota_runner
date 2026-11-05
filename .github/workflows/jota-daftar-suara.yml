@@ -1,0 +1,21 @@
+# Daftar nama suara di akun ElevenLabs (tanpa rahasia), untuk mencocokkan nama di characters/suara.json.
+name: jota-daftar-suara
+on:
+  workflow_dispatch:
+    inputs:
+      cari: { description: 'kata pencarian', required: false, default: '' }
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  daftar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      CARI: ${{ inputs.cari }}
+    steps:
+      - run: |
+          curl -sS -H "xi-api-key: $ELEVENLABS_API_KEY" "https://api.elevenlabs.io/v1/voices?search=$(python3 -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["CARI"]))')" \
+          | python3 -c "import json,sys;[print('SUARA:',v['name'],'|',v.get('category')) for v in json.load(sys.stdin).get('voices',[])]"

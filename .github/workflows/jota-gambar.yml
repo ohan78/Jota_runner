@@ -1,0 +1,78 @@
+# Mode "gambar dulu" (owner 2026-11-05): buat semua gambar awal klip BARU di VideoExpress, simpan ke My AI Images
+# dengan nama <TAG>-SHOTxx-AWAL-1/2, simpan salinannya ke repo (evals/<proyek>/awal/) dan Drive 3. Uji JOTA, lalu berhenti.
+# Video dibuat terpisah dengan jota-produksi setelah gambar dicek dan start shot diubah ke PAKAI_ULANG.
+name: jota-gambar
+on:
+  workflow_dispatch:
+    inputs:
+      shots:
+        description: 'path shots.json dari root repo'
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: jota-produksi
+  cancel-in-progress: false
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  gambar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      JOTA_CI: '1'
+      JOTA_ALLOW_LOCAL: '1'
+      JOTA_SESSION_FILE: ${{ github.workspace }}/vx-session.json
+      VX_EMAIL: ${{ secrets.VX_EMAIL }}
+      VX_PASSWORD: ${{ secrets.VX_PASSWORD }}
+    defaults:
+      run:
+        working-directory: apps/videoexpress-runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Gambar awal semua klip BARU
+        run: node runner.mjs gambar "../../${{ inputs.shots }}"
+      - name: Kerangka QC gambar (awal/qc.json, v3.99)
+        if: always()
+        run: |
+          D="$(dirname "../../${{ inputs.shots }}")/awal"
+          [ -f "$D/kandidat.json" ] && node runner.mjs qc-siap "../../${{ inputs.shots }}" || echo "kandidat.json belum ada; qc-siap dilewati"
+      - name: Tulis ke Google Sheet episode (v3.99.4, dilewati kalau Apps Script belum diperbarui)
+        if: always()
+        continue-on-error: true
+        env:
+          JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+        run: node sheet-sync.mjs tulis "../../${{ inputs.shots }}" || echo "Sinkron Sheet dilewati"
+      - name: Simpan gambar ke repo
+        if: always()
+        run: |
+          D="$(dirname "${{ inputs.shots }}")/awal"
+          cd ../.. && [ -d "$D" ] || exit 0
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          git add "$D" "$(dirname "$D")/sheet.json" 2>/dev/null; git add "$D" && (git diff --cached --quiet || (git commit -q -m "Gambar awal untuk dicek $(basename "$(dirname "$D")")" && git pull -q --rebase && git push -q)) || true
+      - name: Unggah ke Drive 3. Uji JOTA
+        if: always()
+        env:
+          JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+          JOTA_DRIVE_ROOT: uji
+        run: |
+          S="../../${{ inputs.shots }}"; D="$(dirname "$S")/awal"; [ -d "$D" ] || exit 0
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+          node upload-drive.mjs "$D" "$P-GAMBAR-AWAL" || true
+      - name: Screenshot gagal
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gagal-gambar
+          path: apps/videoexpress-runner/gagal-*.png
+          if-no-files-found: ignore

@@ -1,0 +1,133 @@
+# Artistly Runner di server GitHub (tanpa Mac). Kode di apps/artistly-runner, terpisah dari VideoExpress Runner. Owner atau agen menjalankannya dari tab Actions.
+# peta      = cek login dan catat tampilan Artistly, hanya membaca (tidak Generate). Jalankan ini dulu.
+# storybook = satu pesanan storybook sampai PDF dan pratinjau, hasil ke Drive jotaauto1 dan artefak.
+# Butuh secret ARTISTLY_EMAIL dan ARTISTLY_PASSWORD (diisi owner sendiri). Opsional ARTISTLY_SESSION.
+# Data anak tidak ditulis ke repo (AGENTS.md); hanya lewat input di bawah.
+name: artistly-runner
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'peta, storybook, atau komik'
+        required: true
+        default: 'peta'
+      nama:
+        description: 'storybook: nama tokoh atau anak'
+        required: false
+        default: ''
+      ide:
+        description: 'storybook: ide cerita, sebut nama dan usia (maks 200 huruf termasuk kalimat faceless)'
+        required: false
+        default: ''
+      halaman:
+        description: 'storybook: jumlah halaman (maks 30)'
+        required: false
+        default: '10'
+      gaya:
+        description: "3D Pixar, Illustration, Anime, Children's Book, Realistic, Whimsical Storybook, Ghibli"
+        required: false
+        default: "Children's Book"
+      bahasa:
+        description: 'bahasa cerita'
+        required: false
+        default: 'Indonesian'
+      naskah:
+        description: 'komik: path naskah.json di repo, misal skills/jota-video/playbooks/faceless-family-stories/series/30-HARI-UWAIS-HIJRAH/komik/H01/naskah.json'
+        required: false
+        default: ''
+      ambil_saja:
+        description: 'komik: 1 = jangan Generate, ambil buku Script to Storybook terbaru'
+        required: false
+        default: '0'
+      faceless:
+        description: 'ya = tambahkan kalimat tokoh tanpa wajah ke ide'
+        required: false
+        default: 'ya'
+permissions:
+  contents: write
+concurrency:
+  group: artistly-runner
+  cancel-in-progress: false
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  artistly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      JOTA_CI: '1'
+      ARTISTLY_EMAIL: ${{ secrets.ARTISTLY_EMAIL }}
+      ARTISTLY_PASSWORD: ${{ secrets.ARTISTLY_PASSWORD }}
+      ARTISTLY_SESSION_FILE: ${{ github.workspace }}/apps/artistly-runner/artistly-session.json
+      ARTISTLY_OUT: ${{ github.workspace }}/apps/artistly-runner/hasil-artistly
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+      JOTA_DRIVE_ROOT: artistly
+    defaults:
+      run:
+        working-directory: apps/artistly-runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -c "import PIL" 2>/dev/null || pip install --break-system-packages pillow
+      - run: node test.mjs
+      - name: Sesi login (opsional)
+        env:
+          ARTISTLY_SESSION: ${{ secrets.ARTISTLY_SESSION }}
+        run: printf '%s' "$ARTISTLY_SESSION" > artistly-session.json
+      - name: Peta Artistly (hanya membaca)
+        if: ${{ inputs.mode == 'peta' }}
+        run: |
+          node artistly.mjs peta
+          cp qc/PETA_ARTISTLY.md ../../skills/artistly-runner/PETA_ARTISTLY.md
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add skills/artistly-runner/PETA_ARTISTLY.md
+          git commit -m "Peta UI Artistly diperbarui" || true
+          git pull --rebase -q && git push -q || true
+      - name: Daftar Personal Designs (hanya membaca)
+        if: ${{ inputs.mode == 'daftar' }}
+        run: |
+          node artistly.mjs daftar
+          cp qc/DAFTAR_ARTISTLY.md ../../skills/artistly-runner/DAFTAR_ARTISTLY.md; cp qc/daftar-*.png ../../skills/artistly-runner/ 2>/dev/null || true
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add skills/artistly-runner/
+          git commit -qm "Daftar Personal Designs Artistly" || true
+          git pull --rebase -q && git push -q || true
+      - name: Storybook
+        if: ${{ inputs.mode == 'storybook' }}
+        env:
+          IN_NAMA: ${{ inputs.nama }}
+          IN_IDE: ${{ inputs.ide }}
+          IN_HAL: ${{ inputs.halaman }}
+          IN_GAYA: ${{ inputs.gaya }}
+          IN_BAHASA: ${{ inputs.bahasa }}
+          IN_FACELESS: ${{ inputs.faceless }}
+        run: node artistly.mjs storybook --var "nama=$IN_NAMA" --var "ide=$IN_IDE" --var "halaman=$IN_HAL" --var "gaya=$IN_GAYA" --var "bahasa=$IN_BAHASA" --var "faceless=$IN_FACELESS"
+      - name: Komik
+        if: ${{ inputs.mode == 'komik' }}
+        env:
+          IN_NASKAH: ${{ inputs.naskah }}
+          KOMIK_AMBIL: ${{ inputs.ambil_saja }}
+        run: |
+          D=$(dirname "../../$IN_NASKAH")
+          node artistly.mjs komik "../../$IN_NASKAH" || { mkdir -p "$D/qc"; cp qc/komik-* "$D/qc/" 2>/dev/null; cd ../..; git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"; git add "$(dirname "$IN_NASKAH")/qc"; git commit -qm "Komik gagal: diagnosa" && git pull --rebase -q && git push -q; exit 1; }
+          mkdir -p "$D/qc"; cp qc/komik-* "$D/qc/" 2>/dev/null || true
+          # Komik tidak diunggah ke Drive otomatis (owner 2026-11-04): dicek dulu di repo, Drive setelah disetujui.
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add "$(dirname "$IN_NASKAH")"
+          git commit -m "Komik $(basename "$(dirname "$IN_NASKAH")") dirakit" || true
+          git pull --rebase -q && git push -q || true
+      - name: Hapus sesi
+        if: always()
+        run: rm -f artistly-session.json

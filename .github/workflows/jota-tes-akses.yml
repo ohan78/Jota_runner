@@ -1,0 +1,29 @@
+# Uji repo publik: token repo private, push, dan penyamaran log. Tidak memakai Secrets lain.
+name: jota-tes-akses
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\\1***#g'"
+jobs:
+  tes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - name: Baca repo private
+        run: |
+          echo "Versi skill: $(grep -m1 '^version' skills/jota-video/SKILL.md)"
+          echo "Tes samaran: https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrSt/view dan https://youtube.com/shorts/AbCdEfGhIjK"
+      - name: Tes rilis arsip
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: gh release view arsip-final -R ohan78/Jota_Content_Factory --json assets -q '.assets | length' | sed 's/^/Aset arsip: /'
+      - name: Tes exit code tetap gagal kalau perintah gagal
+        run: |
+          false && echo "tidak boleh sampai sini" || echo "pipefail ok"

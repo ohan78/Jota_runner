@@ -1,0 +1,50 @@
+# Unggah FINAL dari arsip GitHub Release ke Facebook Page sebagai Reel. Default DRAFT: owner yang menerbitkan.
+# Secrets wajib: META_PAGE_ID, META_PAGE_TOKEN (diisi owner sendiri di Settings > Secrets and variables > Actions).
+name: jota-facebook
+on:
+  workflow_dispatch:
+    inputs:
+      shots: { description: 'path shots.json, dipisah koma', required: true }
+      status: { description: 'DRAFT atau PUBLISHED', required: true, default: 'DRAFT' }
+  workflow_call:
+    inputs:
+      shots: { type: string, required: true }
+      status: { type: string, required: false, default: 'DRAFT' }
+    secrets:
+      META_PAGE_ID: { required: false }
+      META_PAGE_TOKEN: { required: false }
+permissions:
+  contents: read
+defaults:
+  run:
+    # Repo publik: ID file Drive dan video YouTube disamarkan di log.
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{10,}#\1***#g'"
+jobs:
+  fb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+      META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+      DAFTAR: ${{ inputs.shots }}
+      STATUS: ${{ inputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Unggah ke Facebook
+        run: |
+          [ -n "$META_PAGE_TOKEN" ] || { echo "META_PAGE_TOKEN belum diisi; lewati."; exit 0; }
+          IFS=',' read -ra L <<< "$DAFTAR"
+          for S in "${L[@]}"; do
+            S=$(echo "$S" | xargs)
+            P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
+            mkdir -p "/tmp/f/$P"
+            gh release download arsip-final -R "ohan78/Jota_Content_Factory" -p "$P-FINAL.mp4" -D "/tmp/f/$P" --clobber || { echo "$P: FINAL tidak ada di arsip"; continue; }
+            node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const y=d.youtube||{}; require('fs').writeFileSync('/tmp/fb.json', JSON.stringify({title:y.title||d.project, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S"
+            node apps/videoexpress-runner/upload-facebook.mjs "/tmp/f/$P/$P-FINAL.mp4" /tmp/fb.json "$STATUS" || echo "$P: unggah Facebook gagal"
+          done
