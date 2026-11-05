@@ -94,6 +94,17 @@ jobs:
           git add skills/artistly-runner/PETA_ARTISTLY.md
           git commit -m "Peta UI Artistly diperbarui" || true
           git pull --rebase -q && git push -q || true
+      - name: Peta alat gambar Artistly (hanya membaca)
+        if: ${{ inputs.mode == 'peta-gambar' }}
+        run: |
+          node artistly.mjs peta-gambar
+          D=../../skills/artistly-runner/peta-gambar; mkdir -p $D
+          cp qc/PETA_GAMBAR_ARTISTLY.md $D/ && cp qc/artistly-petagambar-*.png $D/ 2>/dev/null || true
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add skills/artistly-runner/peta-gambar
+          git commit -m "Peta alat gambar Artistly" || true
+          git pull --rebase -q && git push -q || true
       - name: Daftar Personal Designs (hanya membaca)
         if: ${{ inputs.mode == 'daftar' }}
         run: |
