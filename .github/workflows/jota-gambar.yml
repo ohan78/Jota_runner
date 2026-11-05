@@ -8,8 +8,13 @@ on:
       shots:
         description: 'path shots.json dari root repo'
         required: true
+      ulang:
+        description: 'percobaan lanjut otomatis (diisi Runner)'
+        required: false
+        default: '0'
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: jota-produksi
   cancel-in-progress: false
@@ -74,10 +79,15 @@ jobs:
           S="../../${{ inputs.shots }}"; D="$(dirname "$S")/awal"; [ -d "$D" ] || exit 0
           P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
           node upload-drive.mjs "$D" "$P-GAMBAR-AWAL" || true
-      - name: Screenshot gagal
+      - name: Screenshot gagal ke Drive (bukan artifact, repo publik)
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gagal-gambar
-          path: apps/videoexpress-runner/gagal-*.png
-          if-no-files-found: ignore
+        env:
+          JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+        run: |
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          mkdir -p /tmp/diag && cp gagal-*.png /tmp/diag/ 2>/dev/null && node upload-drive.mjs /tmp/diag "$P-DIAGNOSA" || true
+      - name: Lanjut otomatis bila gagal (gambar yang sudah ada dilewati)
+        if: failure() && inputs.ulang != '2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run jota-gambar.yml -R "$GITHUB_REPOSITORY" -f shots="${{ inputs.shots }}" -f ulang="$(( ${{ inputs.ulang }} + 1 ))" && echo "jota-gambar dijalankan ulang otomatis"
