@@ -39,6 +39,7 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     defaults:
       run:
+        shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=)[A-Za-z0-9_-]{{10,}}#\1***#g'"
         working-directory: apps/videoexpress-runner
     steps:
       - uses: actions/checkout@v4
@@ -154,6 +155,24 @@ jobs:
         run: |
           P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
           mkdir -p "$JOTA_EXPORT_DIR/$P"; for f in gagal-*.png gambar-*.png; do [ -f "$f" ] && cp "$f" "$JOTA_EXPORT_DIR/$P/DIAGNOSA-$f"; done; true
+      - name: Unggah ke Drive
+        if: always()
+        env:
+          JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+        run: |
+          : > /tmp/unggah.log
+          for d in "$JOTA_EXPORT_DIR"/*/; do
+            [ -d "$d" ] || continue
+            # Drive hanya menyimpan hasil akhir (owner 2026-11-03): FINAL (atau SUB/asli bila FINAL tidak ada), subtitle,
+            # link YouTube, peta waktu, dan screenshot diagnosa. Versi lain ada di arsip GitHub Release.
+            n=$(basename "$d"); u="/tmp/up/$n"; mkdir -p "$u"
+            F=$(ls "$d"/*-FINAL.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d"/*-SUB.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d/$n.mp4" 2>/dev/null | head -1)
+            for x in $F "$d"/*.srt "$d"/*-YOUTUBE.txt "$d"/PETA-WAKTU*.txt "$d"/DIAGNOSA-*.png; do [ -f "$x" ] && cp "$x" "$u/"; done
+            # proyek uji (nama berisi UJI) ke "3. Uji JOTA", selain itu ke "1. Video JOTA"
+            case "$n" in *UJI*) R=uji ;; *) R=video ;; esac
+            JOTA_DRIVE_ROOT=$R node upload-drive.mjs "$u" "$n" | tee -a /tmp/unggah.log || true
+            cat "$d"/*-YOUTUBE.txt 2>/dev/null | sed 's/^/YouTube: /' >> /tmp/unggah.log || true
+          done
       - name: Progres
         if: always()
         run: cat "$(dirname "../../${{ inputs.shots }}")/progress.json" || true
@@ -175,25 +194,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
-        with:
-          name: hasil
-          path: hasil
-      - name: Unggah ke Drive
-        run: |
-          : > /tmp/unggah.log
-          for d in hasil/out/*/; do
-            [ -d "$d" ] || continue
-            # Drive hanya menyimpan hasil akhir (owner 2026-11-03): FINAL (atau SUB/asli bila FINAL tidak ada), subtitle,
-            # link YouTube, peta waktu, dan screenshot diagnosa. Versi lain ada di arsip GitHub Release.
-            n=$(basename "$d"); u="/tmp/up/$n"; mkdir -p "$u"
-            F=$(ls "$d"/*-FINAL.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d"/*-SUB.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d/$n.mp4" 2>/dev/null | head -1)
-            for x in $F "$d"/*.srt "$d"/*-YOUTUBE.txt "$d"/PETA-WAKTU*.txt "$d"/DIAGNOSA-*.png; do [ -f "$x" ] && cp "$x" "$u/"; done
-            # proyek uji (nama berisi UJI) ke "3. Uji JOTA", selain itu ke "1. Video JOTA"
-            case "$n" in *UJI*) R=uji ;; *) R=video ;; esac
-            JOTA_DRIVE_ROOT=$R node apps/videoexpress-runner/upload-drive.mjs "$u" "$n" | tee -a /tmp/unggah.log || true
-            cat "$d"/*-YOUTUBE.txt 2>/dev/null | sed 's/^/YouTube: /' >> /tmp/unggah.log || true
-          done
       - name: Perbarui dasbor serial
         if: always()
         run: |
