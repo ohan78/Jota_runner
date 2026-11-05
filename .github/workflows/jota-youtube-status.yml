@@ -1,0 +1,29 @@
+# Ubah status video YouTube (public/unlisted/private) atas perintah owner. Video dicari lewat judul di shots.json.
+name: jota-youtube-status
+on:
+  workflow_dispatch:
+    inputs:
+      shots: { description: 'path shots.json dari root repo', required: true }
+      status: { description: 'public, unlisted, atau private', required: true, default: 'public' }
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash -o pipefail -c "bash --noprofile --norc -eo pipefail {0} 2>&1 | sed -u -E 's#(/d/|shorts/|youtu[.]be/|[?&]id=|watch[?]v=)[A-Za-z0-9_-]{{10,}}#\1***#g'"
+jobs:
+  ubah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Ubah status
+        run: node apps/videoexpress-runner/youtube-status.mjs "${{ inputs.shots }}" "${{ inputs.status }}"
