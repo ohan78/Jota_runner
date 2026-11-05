@@ -8,6 +8,10 @@ on:
       shots:
         description: 'path shots.json dari root repo'
         required: true
+      slot:
+        description: 'jalur paralel VideoExpress 1, 2, atau 3 (owner 2026-11-06 05:50); satu jalur satu run'
+        required: false
+        default: '1'
       ulang:
         description: 'percobaan lanjut otomatis (diisi Runner)'
         required: false
@@ -16,7 +20,7 @@ permissions:
   contents: write
   actions: write
 concurrency:
-  group: jota-produksi
+  group: jota-vx-${{ inputs.slot || '1' }}
   cancel-in-progress: false
 defaults:
   run:
@@ -90,4 +94,4 @@ jobs:
         if: failure() && inputs.ulang != '2'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run jota-gambar.yml -R "$GITHUB_REPOSITORY" -f shots="${{ inputs.shots }}" -f ulang="$(( ${{ inputs.ulang }} + 1 ))" && echo "jota-gambar dijalankan ulang otomatis"
+        run: gh workflow run jota-gambar.yml -R "$GITHUB_REPOSITORY" -f slot="${{ inputs.slot || '1' }}" -f shots="${{ inputs.shots }}" -f ulang="$(( ${{ inputs.ulang }} + 1 ))" && echo "jota-gambar dijalankan ulang otomatis"

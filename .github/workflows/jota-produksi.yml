@@ -11,6 +11,10 @@ on:
         description: 'shot yang sudah terkirim di run terputus, misalnya SHOT01,SHOT02'
         required: false
         default: ''
+      slot:
+        description: 'jalur paralel VideoExpress 1, 2, atau 3 (owner 2026-11-06 05:50); satu jalur satu run'
+        required: false
+        default: '1'
       ulang:
         description: 'percobaan lanjut otomatis ke berapa (diisi Runner, jangan diubah)'
         required: false
@@ -19,7 +23,7 @@ permissions:
   contents: write
   actions: write
 concurrency:
-  group: jota-produksi
+  group: jota-vx-${{ inputs.slot || '1' }}
   cancel-in-progress: false
 defaults:
   run:
@@ -220,7 +224,7 @@ jobs:
           SUDAH=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(Object.entries(p.shots||{}).filter(([k,v])=>['SUBMITTED','DONE','READY'].includes(v.status)).map(([k,v])=>v.attempt>1?k+'@'+v.attempt:k).join(','))}catch(e){console.log('')}" "$PR")
           [ -n "${{ inputs.sudah_terkirim }}" ] && SUDAH=$(echo "${{ inputs.sudah_terkirim }},$SUDAH" | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)
           N=$(( ${{ inputs.ulang }} + 1 ))
-          gh workflow run jota-produksi.yml -R "$GITHUB_REPOSITORY" -f shots="${{ inputs.shots }}" -f sudah_terkirim="$SUDAH" -f ulang="$N"
+          gh workflow run jota-produksi.yml -R "$GITHUB_REPOSITORY" -f slot="${{ inputs.slot || '1' }}" -f shots="${{ inputs.shots }}" -f sudah_terkirim="$SUDAH" -f ulang="$N"
           echo "Dijalankan ulang otomatis (percobaan $N), shot terkirim: ${SUDAH:-tidak ada}"
       - name: Kabar Telegram
         if: always()
