@@ -40,7 +40,11 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Pasang Chromium (tanpa apt bila bisa)
+        timeout-minutes: 12
+        run: |
+          timeout 420 npx playwright install chromium
+          timeout 60 node -e "require('playwright').chromium.launch().then(b=>b.close())" || timeout 360 npx playwright install-deps chromium
       - name: Gambar awal semua klip BARU
         run: node runner.mjs gambar "../../${{ inputs.shots }}"
       - name: Kerangka QC gambar (awal/qc.json, v3.99)

@@ -11,6 +11,10 @@ on:
         description: 'shot yang sudah terkirim di run terputus, misalnya SHOT01,SHOT02'
         required: false
         default: ''
+      ulang:
+        description: 'percobaan lanjut otomatis ke berapa (diisi Runner, jangan diubah)'
+        required: false
+        default: '0'
 permissions:
   contents: write
   actions: write
@@ -50,17 +54,40 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: ffprobe untuk cek rasio export
-        timeout-minutes: 10
+      # Anti gagal (owner 2026-11-06 05:43). Cek isi dulu (detik), baru pasang alat berat.
+      - name: Cek shots.json sebelum mulai
+        timeout-minutes: 2
+        run: node runner.mjs plan "../../${{ inputs.shots }}" | tail -5 && node runner.mjs plan "../../${{ inputs.shots }}" | grep -q "shots.json valid"
+      # apt di runner GitHub kadang lambat atau macet (12 menit, 10 menit timeout pada 2026-11-06), jadi tidak ada apt di jalur utama:
+      # browser Playwright dan ffmpeg statis disimpan di cache, apt hanya cadangan terakhir dengan batas waktu.
+      - name: Cache browser dan ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/ffbin
+          key: alat-${{ runner.os }}-${{ hashFiles('apps/videoexpress-runner/package-lock.json') }}-ff7
+      - name: Pasang Chromium (tanpa apt)
+        timeout-minutes: 12
         run: |
-          # apt di runner kadang macet (2026-11-06 run 42114419455): coba apt 4 menit, kalau gagal pakai ffmpeg statis.
-          command -v ffprobe >/dev/null && exit 0
-          timeout 240 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null && exit 0
-          echo "apt gagal; unduh ffmpeg statis"
-          curl -sSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ff.tar.xz
-          mkdir -p /tmp/ff && tar -xJf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1
-          sudo cp /tmp/ff/ffmpeg /tmp/ff/ffprobe /usr/local/bin/ && ffprobe -version | head -1
+          timeout 420 npx playwright install chromium
+          if ! timeout 60 node -e "require('playwright').chromium.launch().then(b=>b.close())"; then
+            echo "Chromium butuh pustaka sistem; pasang dengan batas 6 menit"
+            timeout 360 npx playwright install-deps chromium
+            timeout 60 node -e "require('playwright').chromium.launch().then(b=>b.close())"
+          fi
+          echo "Chromium siap"
+      - name: Pasang ffmpeg (statis, tanpa apt)
+        timeout-minutes: 8
+        run: |
+          mkdir -p ~/ffbin
+          if [ ! -x ~/ffbin/ffprobe ]; then
+            for u in https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz; do
+              timeout 180 curl -fsSL "$u" -o /tmp/ff.tar.xz && mkdir -p /tmp/ff && tar -xJf /tmp/ff.tar.xz -C /tmp/ff && find /tmp/ff -type f \( -name ffmpeg -o -name ffprobe \) -exec cp {} ~/ffbin/ \; && [ -x ~/ffbin/ffprobe ] && break
+            done
+          fi
+          if [ -x ~/ffbin/ffprobe ]; then sudo cp ~/ffbin/ffmpeg ~/ffbin/ffprobe /usr/local/bin/; else timeout 240 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null; fi
+          ffprobe -version | head -1
       - name: Gambar acuan tokoh (sekali per tokoh)
         run: |
           node runner.mjs ref "../../${{ inputs.shots }}"
@@ -184,6 +211,27 @@ jobs:
       - name: Progres
         if: always()
         run: cat "$(dirname "../../${{ inputs.shots }}")/progress.json" || true
+      - name: Lanjut otomatis bila gagal (tanpa generate ulang klip yang sudah terkirim)
+        if: failure() && inputs.ulang != '2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR="$(dirname "../../${{ inputs.shots }}")/progress.json"
+          SUDAH=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(Object.entries(p.shots||{}).filter(([k,v])=>['SUBMITTED','DONE','READY'].includes(v.status)).map(([k,v])=>v.attempt>1?k+'@'+v.attempt:k).join(','))}catch(e){console.log('')}" "$PR")
+          [ -n "${{ inputs.sudah_terkirim }}" ] && SUDAH=$(echo "${{ inputs.sudah_terkirim }},$SUDAH" | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)
+          N=$(( ${{ inputs.ulang }} + 1 ))
+          gh workflow run jota-produksi.yml -R "$GITHUB_REPOSITORY" -f shots="${{ inputs.shots }}" -f sudah_terkirim="$SUDAH" -f ulang="$N"
+          echo "Dijalankan ulang otomatis (percobaan $N), shot terkirim: ${SUDAH:-tidak ada}"
+      - name: Kabar Telegram
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] || exit 0
+          P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
+          GAGAL=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" -q '.jobs[].steps[] | select(.conclusion=="failure") | .name' | head -1)
+          if [ -n "$GAGAL" ]; then T="JOTA $P: gagal di langkah \"$GAGAL\" (percobaan ${{ inputs.ulang }}). $([ '${{ inputs.ulang }}' != '2' ] && echo 'Dilanjutkan otomatis.' || echo 'Berhenti, Claude memeriksa.')"; else T="JOTA $P: video selesai dan tersimpan di Drive."; fi
+          curl -s -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=$T" || true
       - name: Hapus sesi
         if: always()
         run: rm -f "$JOTA_SESSION_FILE"
