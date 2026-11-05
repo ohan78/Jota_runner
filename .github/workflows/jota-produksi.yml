@@ -53,7 +53,14 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: ffprobe untuk cek rasio export
         timeout-minutes: 10
-        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null
+        run: |
+          # apt di runner kadang macet (2026-11-06 run 42114419455): coba apt 4 menit, kalau gagal pakai ffmpeg statis.
+          command -v ffprobe >/dev/null && exit 0
+          timeout 240 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg </dev/null >/dev/null && exit 0
+          echo "apt gagal; unduh ffmpeg statis"
+          curl -sSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ff.tar.xz
+          mkdir -p /tmp/ff && tar -xJf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1
+          sudo cp /tmp/ff/ffmpeg /tmp/ff/ffprobe /usr/local/bin/ && ffprobe -version | head -1
       - name: Gambar acuan tokoh (sekali per tokoh)
         run: |
           node runner.mjs ref "../../${{ inputs.shots }}"
