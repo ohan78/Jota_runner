@@ -1,0 +1,41 @@
+# Foto acuan dari bot Telegram ke Drive "Referensi JOTA", dicek tiap 15 menit. Log hanya jumlah foto.
+name: jota-telegram-ref
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jota-telegram-ref
+  cancel-in-progress: false
+jobs:
+  ambil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+    steps:
+      - name: Lewati kalau bot belum ada
+        id: cek
+        run: '[ -n "$TELEGRAM_BOT_TOKEN" ] && echo ada=1 >> "$GITHUB_OUTPUT" || echo "TELEGRAM_BOT_TOKEN belum diisi"'
+      - uses: actions/checkout@v4
+        if: steps.cek.outputs.ada == '1'
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          sparse-checkout: apps/videoexpress-runner
+      - uses: actions/setup-node@v4
+        if: steps.cek.outputs.ada == '1'
+        with: { node-version: '22' }
+      - name: Ambil foto
+        if: steps.cek.outputs.ada == '1'
+        run: node apps/videoexpress-runner/telegram-ref.mjs
+      - name: Simpan posisi pesan
+        if: steps.cek.outputs.ada == '1'
+        run: |
+          git config user.name "JOTA Runner" && git config user.email "runner@jota.local"
+          git add apps/videoexpress-runner/telegram-offset.txt
+          git diff --cached --quiet || { git commit -q -m "Telegram: posisi pesan" && git pull -q --rebase && git push -q; }
