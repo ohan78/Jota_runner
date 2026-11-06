@@ -91,7 +91,7 @@ jobs:
           P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "../../${{ inputs.shots }}")
           mkdir -p /tmp/diag && cp gagal-*.png /tmp/diag/ 2>/dev/null && node upload-drive.mjs /tmp/diag "$P-DIAGNOSA" || true
       - name: Lanjut otomatis bila gagal (gambar yang sudah ada dilewati)
-        if: failure() && inputs.ulang != '2'
+        if: failure() && inputs.ulang != '2' && hashFiles('apps/videoexpress-runner/gagal-login.txt') == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run jota-gambar.yml -R "$GITHUB_REPOSITORY" -f slot="${{ inputs.slot || '1' }}" -f shots="${{ inputs.shots }}" -f ulang="$(( ${{ inputs.ulang }} + 1 ))" && echo "jota-gambar dijalankan ulang otomatis"

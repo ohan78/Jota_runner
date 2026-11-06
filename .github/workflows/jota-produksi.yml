@@ -216,7 +216,7 @@ jobs:
         if: always()
         run: cat "$(dirname "../../${{ inputs.shots }}")/progress.json" || true
       - name: Lanjut otomatis bila gagal (tanpa generate ulang klip yang sudah terkirim)
-        if: failure() && inputs.ulang != '2'
+        if: failure() && inputs.ulang != '2' && hashFiles('apps/videoexpress-runner/gagal-login.txt') == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
