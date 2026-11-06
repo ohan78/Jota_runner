@@ -10,6 +10,8 @@ on:
   workflow_dispatch:
     inputs:
       jumlah: { description: 'berapa video diposting sekarang', required: false, default: '1' }
+      shots: { description: 'posting ulang satu video (path shots.json) tanpa mengubah antrean', required: false, default: '' }
+      platform: { description: 'yt,ig,fb (posting ulang hanya platform ini)', required: false, default: 'yt,ig,fb' }
 permissions:
   contents: read
   actions: write
@@ -31,6 +33,8 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       JUMLAH: ${{ inputs.jumlah || '1' }}
+      ULANG: ${{ inputs.shots || '' }}
+      PLAT: ${{ inputs.platform || 'yt,ig,fb' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +49,7 @@ jobs:
           for n in $(seq 1 "$JUMLAH"); do
             git fetch -q origin main && git reset -q --hard origin/main
             S=$(grep -v '^\s*\(#\|$\)' "$A" 2>/dev/null | head -1 | xargs || true)
+            [ -n "$ULANG" ] && S="$ULANG"
             [ -n "$S" ] || { echo "Antrean posting kosong."; break; }
             P=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).project)" "$S")
             mkdir -p "/tmp/v/$P"
@@ -53,12 +58,21 @@ jobs:
             fi
             node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const y=d.youtube||{}; require('fs').writeFileSync('/tmp/meta.json', JSON.stringify({title:y.title||d.project, description:(y.description||'').replace(/#shorts/g,'#reels')}))" "$S"
             V="/tmp/v/$P/$P-FINAL.mp4"; HASIL="$P:"
-            node apps/videoexpress-runner/youtube-status.mjs "$S" public && HASIL="$HASIL YouTube public;" || HASIL="$HASIL YouTube GAGAL;"
-            node apps/videoexpress-runner/upload-instagram.mjs "$V" /tmp/meta.json && HASIL="$HASIL Instagram tayang;" || HASIL="$HASIL Instagram GAGAL;"
-            node apps/videoexpress-runner/upload-facebook.mjs "$V" /tmp/meta.json PUBLISHED && HASIL="$HASIL Facebook tayang." || HASIL="$HASIL Facebook GAGAL."
+            # 2026-11-06 H07: youtube-status gagal ("Playlist unggahan tidak ditemukan", token hanya izin unggah). Cadangan: unggah ulang public.
+            if [[ "$PLAT" == *yt* ]]; then
+              if node apps/videoexpress-runner/youtube-status.mjs "$S" public; then HASIL="$HASIL YouTube public;"
+              else node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); require('fs').writeFileSync('/tmp/yt.json', JSON.stringify({...(d.youtube||{}), title:(d.youtube&&d.youtube.title)||d.project, privacy:'public'}))" "$S"
+                node apps/videoexpress-runner/upload-youtube.mjs "$V" /tmp/yt.json && HASIL="$HASIL YouTube public (unggah ulang);" || HASIL="$HASIL YouTube GAGAL;"; fi
+            fi
+            # Instagram kadang "ProcessingFailedError"; dicoba ulang sekali setelah 90 detik.
+            if [[ "$PLAT" == *ig* ]]; then
+              if node apps/videoexpress-runner/upload-instagram.mjs "$V" /tmp/meta.json || { sleep 90; node apps/videoexpress-runner/upload-instagram.mjs "$V" /tmp/meta.json; }; then HASIL="$HASIL Instagram tayang;"; else HASIL="$HASIL Instagram GAGAL;"; fi
+            fi
+            if [[ "$PLAT" == *fb* ]]; then node apps/videoexpress-runner/upload-facebook.mjs "$V" /tmp/meta.json PUBLISHED && HASIL="$HASIL Facebook tayang." || HASIL="$HASIL Facebook GAGAL."; fi
             echo "$HASIL"
             N=$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(d.serial&&d.serial.dashboard||'')" "$S")
             [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && curl -s -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=Posting JOTA $HASIL" || true
+            [ -n "$ULANG" ] && break
             for i in 1 2 3; do
               git fetch -q origin main && git reset -q --hard origin/main
               grep -vxF "$S" "$A" > /tmp/sisa || true; cp /tmp/sisa "$A"
@@ -69,6 +83,7 @@ jobs:
             # Kompilasi setiap 10 episode yang sudah tayang (owner 05:23).
             if [ -n "$N" ] && [ -f "$N" ]; then
               M=$(node apps/videoexpress-runner/kompilasi-cek.mjs "$N" "$S" apps/videoexpress-runner/riwayat-posting.txt || true)
-              [ -n "$M" ] && GH_TOKEN=${{ github.token }} gh workflow run jota-kompilasi.yml -R "$GITHUB_REPOSITORY" -f minggu="$M" -f dashboard="$N" && echo "Kompilasi bagian $M dijadwalkan ($N)"
+              if [ -n "$M" ]; then GH_TOKEN=${{ github.token }} gh workflow run jota-kompilasi.yml -R "$GITHUB_REPOSITORY" -f minggu="$M" -f dashboard="$N" && echo "Kompilasi bagian $M dijadwalkan ($N)"; fi
             fi
           done
+          true
