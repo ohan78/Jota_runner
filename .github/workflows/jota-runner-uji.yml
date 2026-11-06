@@ -87,7 +87,7 @@ jobs:
           git commit -m "Gambar acuan tokoh untuk Artistly" || true
           git pull --rebase -q && git push -q || true
       - name: Peta impor Artistly (hanya membaca)
-        if: ${{ inputs.mode == 'artistly' || inputs.mode == 'impor-artistly' }}
+        if: ${{ inputs.mode == 'artistly' }}
         run: |
           if [ "${{ inputs.mode }}" = impor-artistly ]; then node runner.mjs peta-impor-artistly; else node runner.mjs peta-artistly; fi
           cd ../..
