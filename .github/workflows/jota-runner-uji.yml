@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'login, ui, ff, narasi, peta, fix, atau shot'
+        description: 'login, ui, ff, narasi, peta, acuan, fix, atau shot'
         required: true
         default: 'login'
       label:
@@ -76,6 +76,15 @@ jobs:
           git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
           git add skills/videoexpress-runner/PETA_UI.md
           git commit -m "Peta UI VideoExpress diperbarui" || true
+          git pull --rebase -q && git push -q || true
+      - name: Ekspor gambar acuan tokoh (hanya membaca, untuk Artistly)
+        if: ${{ inputs.mode == 'acuan' }}
+        run: |
+          node runner.mjs ekspor-acuan
+          cd ../..
+          git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
+          git add skills/jota-video/characters/acuan
+          git commit -m "Gambar acuan tokoh untuk Artistly" || true
           git pull --rebase -q && git push -q || true
       - name: Fix Video atas perintah owner
         if: ${{ inputs.mode == 'fix' }}
