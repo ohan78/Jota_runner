@@ -163,6 +163,8 @@ jobs:
           D=$(dirname "../../$IN_NASKAH")
           node artistly.mjs gambar-v6 "../../$IN_NASKAH" || echo "sebagian halaman gagal; gambar yang jadi tetap disimpan"
           cp qc/v6-gagal-* "$D/gambar/" 2>/dev/null || true
+          # Owner 2026-11-07 04:53 ("fatal, jangan keliatan muka"): gambar berwajah dibuang sebelum disimpan.
+          pip install -q "opencv-python-headless<5" >/dev/null 2>&1 && python3 saring-wajah.py "$D/gambar" && rm -rf "$D/gambar/ditolak" || echo "saring wajah gagal dijalankan; cek manual"
           cd ../..
           git config user.name "jota-runner"; git config user.email "jota-runner@users.noreply.github.com"
           git add "$(dirname "$IN_NASKAH")"
