@@ -60,7 +60,8 @@ jobs:
             V="/tmp/v/$P/$P-FINAL.mp4"; HASIL="$P:"
             # 2026-11-06 H07: youtube-status gagal ("Playlist unggahan tidak ditemukan", token hanya izin unggah). Cadangan: unggah ulang public.
             if [[ "$PLAT" == *yt* ]]; then
-              if node apps/videoexpress-runner/youtube-status.mjs "$S" public; then HASIL="$HASIL YouTube public;"
+              # Video tidak lagi diunggah private saat produksi; langsung unggah public di sini.
+              if false; then :
               else node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); require('fs').writeFileSync('/tmp/yt.json', JSON.stringify({...(d.youtube||{}), title:(d.youtube&&d.youtube.title)||d.project, privacy:'public'}))" "$S"
                 node apps/videoexpress-runner/upload-youtube.mjs "$V" /tmp/yt.json && HASIL="$HASIL YouTube public (unggah ulang);" || HASIL="$HASIL YouTube GAGAL;"; fi
             fi

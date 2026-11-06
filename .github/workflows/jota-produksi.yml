@@ -165,7 +165,10 @@ jobs:
           [ -n "$F" ] && [ -f "$F" ] || { echo 'Tidak ada FINAL; dilewati.'; exit 0; }
           gh release view arsip-final -R "ohan78/Jota_Content_Factory" >/dev/null 2>&1 || gh release create arsip-final -R "ohan78/Jota_Content_Factory" --prerelease --title "Arsip FINAL" --notes "MP4 final per episode, bahan kompilasi mingguan."
           cp "$F" "/tmp/$P-FINAL.mp4" && gh release upload arsip-final "/tmp/$P-FINAL.mp4" -R "ohan78/Jota_Content_Factory" --clobber && echo "Arsip: $P-FINAL.mp4"
-      - name: Unggah YouTube (private, hanya bila shots.json punya "youtube")
+      # 2026-11-06: setiap finish ulang mengunggah salinan private sehingga batas unggah harian YouTube habis dan posting publik gagal.
+      # Unggahan YouTube kini hanya saat posting (jota-posting-harian, langsung public). Private di sini hanya bila diminta.
+      - name: Unggah YouTube (private, hanya bila shots.json punya "youtube_private")
+        if: ${{ false }}
         continue-on-error: true
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
