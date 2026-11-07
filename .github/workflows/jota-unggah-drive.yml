@@ -1,0 +1,33 @@
+# Unggah satu folder dari repo privat ke Drive jotaauto1 (lewat Apps Script JOTA_DRIVE_URL).
+name: jota-unggah-drive
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: 'folder di repo privat'
+        required: true
+      nama:
+        description: 'nama folder di Drive'
+        required: true
+      root:
+        description: 'video, artistly, atau uji'
+        required: false
+        default: 'video'
+permissions:
+  contents: read
+jobs:
+  unggah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Unggah
+        env:
+          JOTA_DRIVE_URL: ${{ secrets.JOTA_DRIVE_URL }}
+          JOTA_DRIVE_ROOT: ${{ inputs.root }}
+        run: node apps/videoexpress-runner/upload-drive.mjs "${{ inputs.folder }}" "${{ inputs.nama }}"
