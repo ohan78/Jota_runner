@@ -43,8 +43,10 @@ jobs:
           const vxRuns = runs.filter((r) => VX.includes(r.name));
           const baruLogin = vxRuns.find((r) => now - Date.parse(r.run_started_at || r.created_at) < 20 * 60 * 1000);
           const status = fs.existsSync(S) ? JSON.parse(fs.readFileSync(S, 'utf8')) : { perintah: {} };
+          const lamaJson = JSON.stringify({ p: status.perintah, r: status.run_terakhir });
           status.diperbarui = new Date().toISOString();
-          status.run_terakhir = runs.slice(0, 12).map((r) => ({ id: r.id, nama: r.name, status: r.status, hasil: r.conclusion, mulai: r.created_at, url: r.html_url }));
+          // Run jota-perintah sendiri tidak dicatat, supaya status hanya di-commit bila ada perubahan nyata.
+          status.run_terakhir = runs.filter((r) => r.name !== 'jota-perintah').slice(0, 12).map((r) => ({ id: r.id, nama: r.name, status: r.status, hasil: r.conclusion, mulai: r.created_at, url: r.html_url }));
           const ok = /^(gpt\/productions|skills\/jota-video\/playbooks\/[a-z-]+\/productions)\/[A-Za-z0-9-]+$/;
           let dijalankan = null;
           for (const c of list) {
@@ -69,7 +71,7 @@ jobs:
             status.perintah[id] = { tahap: 'dijalankan', workflow: wf, folder, slot, waktu: status.diperbarui };
             dijalankan = id; break;                               // satu perintah per putaran
           }
-          fs.writeFileSync(S, JSON.stringify(status, null, 2) + '\n');
+          if (JSON.stringify({ p: status.perintah, r: status.run_terakhir }) !== lamaJson) fs.writeFileSync(S, JSON.stringify(status, null, 2) + '\n');
           console.log(dijalankan ? `Dijalankan: ${dijalankan}` : 'Tidak ada perintah yang dijalankan putaran ini.');
           JS
       - name: Simpan status
