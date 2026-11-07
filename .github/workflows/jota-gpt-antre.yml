@@ -41,6 +41,8 @@ jobs:
           BEFORE: ${{ github.event.before }}
           FOLDER: ${{ inputs.folder }}
           SIAPKAN: ${{ inputs.siapkan_saja || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -e
           if [ -n "$FOLDER" ]; then
@@ -70,6 +72,7 @@ jobs:
             { [ "$ok" = 1 ] && echo "LOLOS $(date -u +%FT%TZ) - lanjut produksi" || echo "DITOLAK $(date -u +%FT%TZ) - perbaiki brief.json sesuai baris GAGAL/KESALAHAN/- di bawah, lalu kirim perintah buat dengan id baru"; echo; grep -v '^\s*at \|node:internal\|^Node.js' "$LOG.isi"; } > "$LOG"; rm -f "$LOG.isi"; cat "$LOG"
             git config user.name "JOTA Runner"; git config user.email "runner@jota.local"
             git add "$LOG"; git commit -qm "Hasil cek naskah ($d)" || true
+            [ -n "$TELEGRAM_BOT_TOKEN" ] && curl -s -o /dev/null "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=Pos 2 Satpam Naskah: $(basename "$d") $( [ "$ok" = 1 ] && echo "LOLOS, lanjut produksi (video ke Drive sekitar 20 menit)" || echo "DITOLAK: $(grep -m2 -E 'GAGAL|KESALAHAN|^- ' "$LOG" | tr '\n' ' ' | cut -c1-300)")" || true
             for i in 1 2 3; do git pull --rebase -q origin main && git push -q origin HEAD:main && break; sleep 5; done
             [ "$ok" = 1 ] || { [ "$ok" = 1 ] || git checkout -- "$d/shots.json" 2>/dev/null || true; exit 1; }
             if ! git diff --quiet -- "$d/shots.json" || ! git ls-files --error-unmatch "$d/shots.json" >/dev/null 2>&1; then
