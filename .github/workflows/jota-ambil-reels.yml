@@ -21,8 +21,10 @@ jobs:
           mkdir -p out
           yt-dlp --no-playlist -f "b[ext=mp4]/b" -o "out/reels.%(ext)s" --write-info-json "$URL" || yt-dlp --no-playlist -o "out/reels.%(ext)s" --write-info-json "$URL"
           ls -la out
-      - uses: actions/upload-artifact@v4
-        with:
-          name: reels
-          path: out/
-          retention-days: 3
+      - name: Simpan ke rilis privat studi-reels
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          R=ohan78/Jota_Content_Factory
+          gh release view studi-reels -R $R >/dev/null 2>&1 || gh release create studi-reels -R $R --title "Studi gaya Reels (privat)" --notes "Bahan studi gaya, bukan untuk diunggah ulang" --prerelease
+          gh release upload studi-reels -R $R out/reels.mp4 out/reels.info.json --clobber
