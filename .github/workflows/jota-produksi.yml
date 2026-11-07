@@ -208,7 +208,8 @@ jobs:
             # Drive hanya menyimpan hasil akhir (owner 2026-11-03): FINAL (atau SUB/asli bila FINAL tidak ada), subtitle,
             # link YouTube, peta waktu, dan screenshot diagnosa. Versi lain ada di arsip GitHub Release.
             n=$(basename "$d"); u="/tmp/up/$n"; mkdir -p "$u"
-            F=$(ls "$d"/*-FINAL.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d"/*-SUB.mp4 2>/dev/null | head -1); [ -n "$F" ] || F=$(ls "$d/$n.mp4" 2>/dev/null | head -1)
+            # 2026-11-07 Sandal Tua: tanpa file -FINAL, ls gagal (kode 2) dan pipefail menghentikan langkah. Diberi || true.
+          F=$(ls "$d"/*-FINAL.mp4 2>/dev/null | head -1 || true); [ -n "$F" ] || F=$(ls "$d"/*-SUB.mp4 2>/dev/null | head -1 || true); [ -n "$F" ] || F=$(ls "$d/$n.mp4" 2>/dev/null | head -1 || true)
             for x in $F "$d"/*.srt "$d"/*-YOUTUBE.txt "$d"/PETA-WAKTU*.txt "$d"/DIAGNOSA-*.png; do [ -f "$x" ] && cp "$x" "$u/"; done
             # proyek uji (nama berisi UJI) ke "3. Uji JOTA", selain itu ke "1. Video JOTA"
             case "$n" in *UJI*) R=uji ;; *) R=video ;; esac
