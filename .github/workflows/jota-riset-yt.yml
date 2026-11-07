@@ -1,0 +1,58 @@
+# Riset YouTube: cari video per kata kunci (yt-dlp ytsearch), ambil metadata dan teks (subtitle otomatis) untuk benchmark.
+# Hasil ke rilis privat studi-reels sebagai riset-<nama>.zip. Tidak mengunduh video.
+name: jota-riset-yt
+on:
+  workflow_dispatch:
+    inputs:
+      kueri:
+        description: 'kata kunci dipisah | (contoh: videoexpress faceless|faceless islamic animation)'
+        required: true
+      jumlah:
+        description: 'hasil per kata kunci'
+        required: false
+        default: '15'
+      subs:
+        description: 'ambil subtitle untuk N video teratas per kueri (0 = tidak)'
+        required: false
+        default: '5'
+      nama:
+        description: 'nama berkas hasil'
+        required: false
+        default: 'riset'
+permissions:
+  contents: read
+jobs:
+  riset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Cari
+        env:
+          KUERI: ${{ inputs.kueri }}
+          N: ${{ inputs.jumlah }}
+          S: ${{ inputs.subs }}
+        run: |
+          pip install -q -U yt-dlp
+          mkdir -p out/subs
+          IFS='|' read -ra QS <<< "$KUERI"
+          i=0
+          for q in "${QS[@]}"; do
+            i=$((i+1))
+            yt-dlp --flat-playlist -j "ytsearch${N}:${q}" > "out/q$i.jsonl" 2>/dev/null || true
+            echo "$q" > "out/q$i.txt"
+            if [ "$S" != "0" ]; then
+              head -n "$S" "out/q$i.jsonl" | python3 -c "import sys,json;[print(json.loads(l)['id']) for l in sys.stdin if l.strip()]" | while read id; do
+                yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs "en.*,id.*" --sub-format vtt --write-info-json -o "out/subs/%(id)s.%(ext)s" "https://www.youtube.com/watch?v=$id" >/dev/null 2>&1 || true
+              done
+            fi
+          done
+          ls out | head; ls out/subs | wc -l
+      - name: Simpan ke rilis privat
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          NAMA: ${{ inputs.nama }}
+        run: |
+          cd out && zip -qr "../riset-$NAMA.zip" . && cd ..
+          R=ohan78/Jota_Content_Factory
+          gh release view studi-reels -R $R >/dev/null 2>&1 || gh release create studi-reels -R $R --title "Studi gaya (privat)" --notes "Bahan studi" --prerelease
+          gh release upload studi-reels -R $R "riset-$NAMA.zip" --clobber
