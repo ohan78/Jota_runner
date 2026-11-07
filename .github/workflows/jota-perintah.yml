@@ -3,7 +3,7 @@
 # Aksi yang diizinkan: siapkan (brief -> shots.json), gambar (gambar awal), produksi (video ke Drive). Tidak ada posting publik.
 # Jeda login VideoExpress dijaga: perintah gambar/produksi ditahan bila ada run VideoExpress yang dimulai < 20 menit lalu
 # (run di slot yang sama diantrekan concurrency workflow). Hasil ditulis ke gpt/status-perintah.json.
-name: jota-perintah
+name: Penjaga Antrean - kerjakan perintah (jota-perintah)
 on:
   schedule:
     - cron: '*/10 * * * *'

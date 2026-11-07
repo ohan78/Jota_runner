@@ -1,6 +1,6 @@
 # Uji: apakah Runner bisa mengoperasikan VideoExpress dari server GitHub (tanpa laptop).
 # login = cek login dan dialog Create tanpa membuat apa pun; shot = kirim satu shot uji 5 detik (1 kredit).
-name: jota-runner-uji
+name: Bengkel - uji dan impor (jota-runner-uji)
 on:
   workflow_dispatch:
     inputs:

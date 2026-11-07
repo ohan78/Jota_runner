@@ -1,7 +1,7 @@
 # Mode "gambar dulu" (owner 2026-11-05): buat semua gambar awal klip BARU di VideoExpress, simpan ke My AI Images
 # dengan nama <TAG>-SHOTxx-AWAL-1/2, simpan salinannya ke repo (evals/<proyek>/awal/) dan Drive 3. Uji JOTA, lalu berhenti.
 # Video dibuat terpisah dengan jota-produksi setelah gambar dicek dan start shot diubah ke PAKAI_ULANG.
-name: jota-gambar
+name: POS 3 Studio Gambar VideoExpress (jota-gambar)
 on:
   workflow_dispatch:
     inputs:

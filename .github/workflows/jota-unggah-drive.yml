@@ -1,5 +1,5 @@
 # Unggah satu folder dari repo privat ke Drive jotaauto1 (lewat Apps Script JOTA_DRIVE_URL).
-name: jota-unggah-drive
+name: POS 7 Gudang Drive - unggah (jota-unggah-drive)
 on:
   workflow_dispatch:
     inputs:

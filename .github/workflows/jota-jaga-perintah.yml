@@ -2,7 +2,7 @@
 # (jota-perintah hanya terpicu 1x dalam 10 jam), jadi job ini hidup terus: tiap 3 menit membaca gpt/perintah.json dan
 # gpt/status-perintah.json; bila ada perintah yang belum punya status, jota-perintah dijalankan. Sebelum batas 6 jam,
 # job menjalankan dirinya lagi (workflow_dispatch oleh GITHUB_TOKEN diizinkan GitHub). Cron di bawah hanya cadangan.
-name: jota-jaga-perintah
+name: Penjaga Antrean (jota-jaga-perintah)
 on:
   workflow_dispatch: {}
   schedule:

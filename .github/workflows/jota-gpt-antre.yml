@@ -1,7 +1,7 @@
 # Antrean produksi dari ChatGPT/Codex (folder gpt/productions/).
 # Push yang mengubah brief.json atau shots.json dengan "auto": true: brief.json dibangun menjadi shots.json lengkap,
 # divalidasi, di-commit, lalu dikirim ke jota-produksi (antre lewat concurrency, tidak bentrok dengan Claude).
-name: jota-gpt-antre
+name: POS 2 Satpam Naskah (jota-gpt-antre)
 on:
   workflow_dispatch:
     inputs:

@@ -1,6 +1,6 @@
 # Produksi JOTA di server GitHub (tanpa laptop): run lalu finish untuk satu shots.json, lalu unggah ke Drive
 # jotaauto1 "Video JOTA/<proyek>/" lewat Apps Script (secret JOTA_DRIVE_URL). Hasil juga disimpan sebagai artifact.
-name: jota-produksi
+name: POS 4-5 Studio Video dan Ruang Rakit (jota-produksi)
 on:
   workflow_dispatch:
     inputs:

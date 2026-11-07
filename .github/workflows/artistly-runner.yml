@@ -3,7 +3,7 @@
 # storybook = satu pesanan storybook sampai PDF dan pratinjau, hasil ke Drive jotaauto1 dan artefak.
 # Butuh secret ARTISTLY_EMAIL dan ARTISTLY_PASSWORD (diisi owner sendiri). Opsional ARTISTLY_SESSION.
 # Data anak tidak ditulis ke repo (AGENTS.md); hanya lewat input di bawah.
-name: artistly-runner
+name: POS 3 Studio Gambar Artistly (artistly-runner)
 on:
   workflow_dispatch:
     inputs:

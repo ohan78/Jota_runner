@@ -1,7 +1,7 @@
 # Posting terjadwal (owner 2026-11-06 05:15, naik 3 slot 05:47): satu video per slot ke YouTube (public), Instagram Reel, dan Facebook Reel.
 # Antrean: apps/videoexpress-runner/antrean-posting.txt di repo privat (satu path shots.json per baris, urut).
 # Video harus sudah ada di arsip FINAL (GitHub Release) dan YouTube (private) dari jota-produksi.
-name: jota-posting-harian
+name: POS 8 Pintu Tayang video (jota-posting-harian)
 on:
   schedule:
     - cron: '7 0 * * *'    # 07:07 WIB

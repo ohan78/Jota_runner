@@ -1,6 +1,6 @@
 # Posting foto feed (poster Hikmah Hadis) ke Facebook Page dan Instagram. Hanya dijalankan atas perintah owner.
 # folder berisi caption.json {"01": {"file": "hikmah-01.jpg", "caption": "..."}}; nomor = "01" atau "01,02".
-name: jota-posting-foto
+name: POS 8 Pintu Tayang poster (jota-posting-foto)
 on:
   workflow_dispatch:
     inputs:
