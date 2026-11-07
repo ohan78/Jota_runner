@@ -1,0 +1,28 @@
+# Ambil video Reels/Shorts publik untuk dipelajari gayanya (bukan untuk diunggah ulang). Hasil: artifact "reels".
+name: jota-ambil-reels
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'link Reels/Shorts publik'
+        required: true
+permissions:
+  contents: read
+jobs:
+  ambil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Unduh
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          pip install -q -U yt-dlp
+          mkdir -p out
+          yt-dlp --no-playlist -f "b[ext=mp4]/b" -o "out/reels.%(ext)s" --write-info-json "$URL" || yt-dlp --no-playlist -o "out/reels.%(ext)s" --write-info-json "$URL"
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reels
+          path: out/
+          retention-days: 3
