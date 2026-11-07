@@ -1,0 +1,49 @@
+# Studi YouTube: cari video (yt-dlp ytsearch) dan ambil subtitle otomatis untuk dipelajari. Hasil ke rilis privat studi-youtube.
+name: jota-studi-youtube
+on:
+  workflow_dispatch:
+    inputs:
+      cari:
+        description: 'kata kunci dipisah | (masing-masing ambil 15 hasil teratas), boleh kosong'
+        required: false
+        default: ''
+      video:
+        description: 'ID video dipisah koma untuk diambil subtitlenya, boleh kosong'
+        required: false
+        default: ''
+      nama:
+        description: 'nama paket hasil'
+        required: true
+permissions:
+  contents: read
+jobs:
+  studi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Cari dan ambil subtitle
+        env:
+          CARI: ${{ inputs.cari }}
+          VIDEO: ${{ inputs.video }}
+        run: |
+          pip install -q -U yt-dlp
+          mkdir -p out/sub
+          IFS='|' read -ra Q <<< "$CARI"
+          for q in "${Q[@]}"; do
+            q=$(echo "$q" | xargs); [ -z "$q" ] && continue
+            yt-dlp --flat-playlist --print "%(id)s	%(view_count)s	%(duration)s	%(channel)s	%(title)s" "ytsearch15:$q" >> out/cari.tsv 2>/dev/null || true
+            echo "=== $q" >> out/cari.tsv
+          done
+          for v in ${VIDEO//,/ }; do
+            yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs "en.*,id.*" --sub-format vtt --print-to-file "%(id)s	%(view_count)s	%(channel)s	%(title)s" out/video.tsv -o "out/sub/%(id)s.%(ext)s" "https://www.youtube.com/watch?v=$v" || echo "$v gagal" >> out/video.tsv
+          done
+          ls -la out out/sub | head -80
+          tar czf studi.tgz out
+      - name: Simpan ke rilis privat
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          R=ohan78/Jota_Content_Factory
+          gh release view studi-youtube -R $R >/dev/null 2>&1 || gh release create studi-youtube -R $R --title "Studi YouTube (privat)" --notes "Bahan studi" --prerelease
+          mv studi.tgz "${{ inputs.nama }}.tgz"
+          gh release upload studi-youtube -R $R "${{ inputs.nama }}.tgz" --clobber
