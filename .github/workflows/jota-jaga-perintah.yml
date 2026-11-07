@@ -1,0 +1,35 @@
+# Penjaga antrean ChatGPT (owner 2026-11-07 19:34: "chatgpt macet mulu"). Jadwal cron GitHub sering tidak jalan
+# (jota-perintah hanya terpicu 1x dalam 10 jam), jadi job ini hidup terus: tiap 3 menit membaca gpt/perintah.json dan
+# gpt/status-perintah.json; bila ada perintah yang belum punya status, jota-perintah dijalankan. Sebelum batas 6 jam,
+# job menjalankan dirinya lagi (workflow_dispatch oleh GITHUB_TOKEN diizinkan GitHub). Cron di bawah hanya cadangan.
+name: jota-jaga-perintah
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 */3 * * *'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: jota-jaga-perintah
+  cancel-in-progress: false
+jobs:
+  jaga:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Jaga
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRIV: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          baca() { curl -s -H "Authorization: Bearer $PRIV" -H "Accept: application/vnd.github.raw" "https://api.github.com/repos/ohan78/Jota_Content_Factory/contents/$1?ref=main"; }
+          AKHIR=$(( $(date +%s) + 330*60 ))
+          while [ $(date +%s) -lt $AKHIR ]; do
+            baca gpt/perintah.json > /tmp/p.json; baca gpt/status-perintah.json > /tmp/s.json
+            N=$(node -e "const p=JSON.parse(require('fs').readFileSync('/tmp/p.json','utf8')).perintah||[];let s={};try{s=JSON.parse(require('fs').readFileSync('/tmp/s.json','utf8')).perintah||{}}catch{};const t=p.filter(c=>c&&c.id&&(!s[c.id]||s[c.id].tahap==='ditahan'));console.log(t.length)" 2>/dev/null || echo 0)
+            JALAN=$(gh run list -R "$GITHUB_REPOSITORY" -w jota-perintah.yml -L 3 --json status -q '[.[]|select(.status!="completed")]|length')
+            if [ "${N:-0}" -gt 0 ] && [ "${JALAN:-0}" = 0 ]; then echo "$(date -u +%H:%M) $N perintah menunggu, jota-perintah dijalankan"; gh workflow run jota-perintah.yml -R "$GITHUB_REPOSITORY"; fi
+            sleep 180
+          done
+          gh workflow run jota-jaga-perintah.yml -R "$GITHUB_REPOSITORY"

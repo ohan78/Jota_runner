@@ -60,10 +60,11 @@ jobs:
             if (!['1', '2', '3'].includes(slot)) { tolak('slot harus 1-3'); continue; }
             let wf, args;
             if (c.aksi === 'siapkan') { wf = 'jota-gpt-antre.yml'; args = ['-f', `folder=${folder}`, '-f', 'siapkan_saja=true']; }
+            else if (c.aksi === 'buat') { wf = 'jota-gpt-antre.yml'; args = ['-f', `folder=${folder}`]; } // siapkan + produksi sekaligus (brief "auto": true)
             else if (c.aksi === 'gambar') { wf = 'jota-gambar.yml'; args = ['-f', `shots=${folder}/shots.json`, '-f', `slot=${slot}`]; }
             else if (c.aksi === 'produksi') { wf = 'jota-produksi.yml'; args = ['-f', `shots=${folder}/shots.json`, '-f', `slot=${slot}`, ...(c.sudah_terkirim ? ['-f', `sudah_terkirim=${c.sudah_terkirim}`] : [])]; }
-            else { tolak(`aksi "${c.aksi}" tidak diizinkan (hanya siapkan, gambar, produksi)`); continue; }
-            if (wf !== 'jota-gpt-antre.yml') {
+            else { tolak(`aksi "${c.aksi}" tidak diizinkan (hanya siapkan, buat, gambar, produksi)`); continue; }
+            if (wf !== 'jota-gpt-antre.yml' || c.aksi === 'buat') {
               // Slot yang sama diantrekan oleh concurrency group workflow; di sini hanya jeda login yang dijaga.
               if (baruLogin) { status.perintah[id] = { tahap: 'ditahan', alasan: `jeda login VideoExpress (run ${baruLogin.name} ${baruLogin.created_at})`, waktu: status.diperbarui }; break; }
             }
