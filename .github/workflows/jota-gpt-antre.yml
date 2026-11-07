@@ -8,6 +8,10 @@ on:
       folder:
         description: 'folder produksi, misalnya gpt/productions/JOTA-M1-UMMI-HEBAT-H00-20261103'
         required: true
+      siapkan_saja:
+        description: 'true = hanya bangun dan validasi shots.json lalu commit (tanpa produksi, tanpa melihat auto)'
+        required: false
+        default: 'false'
 permissions:
   contents: write
   actions: write
@@ -36,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
           BEFORE: ${{ github.event.before }}
           FOLDER: ${{ inputs.folder }}
+          SIAPKAN: ${{ inputs.siapkan_saja || 'false' }}
         run: |
           set -e
           if [ -n "$FOLDER" ]; then
@@ -50,10 +55,12 @@ jobs:
             case "$d" in *CONTOH*) echo "$d: contoh, dilewati"; continue;; esac
             src="$d/shots.json"; [ -f "$d/brief.json" ] && src="$d/brief.json"
             AUTO=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).auto===true)" "$src")
-            [ "$AUTO" = "true" ] || { echo "$d: auto false, dilewati"; continue; }
+            # 2026-11-07 (usulan ChatGPT, Sandal Tua): siapkan_saja = brief -> shots.json + validasi + commit, tanpa produksi.
+            [ "$AUTO" = "true" ] || [ "$SIAPKAN" = "true" ] || { echo "$d: auto false, dilewati"; continue; }
             n=$((n+1))
             [ "$n" -le 1 ] || { echo "Lebih dari satu produksi auto dalam satu push; $d tidak dikirim."; continue; }
             if [ -f "$d/brief.json" ]; then
+              [ -f apps/videoexpress-runner/cek-brief.mjs ] && (cd apps/videoexpress-runner && node cek-brief.mjs "../../$d/brief.json")
               (cd apps/videoexpress-runner && node dari-brief.mjs "../../$d/brief.json")
             fi
             (cd apps/videoexpress-runner && node runner.mjs plan "../../$d/shots.json")
@@ -62,6 +69,7 @@ jobs:
               git add "$d/shots.json"; git commit -m "Antrean GPT: shots.json dibangun dari brief ($d)"
               for i in 1 2 3; do git pull --rebase -q origin main && git push -q origin HEAD:main && break; sleep 5; done
             fi
+            if [ "$SIAPKAN" = "true" ]; then echo "Siap (tanpa produksi): $d/shots.json"; continue; fi
             GH_TOKEN=${{ github.token }} gh workflow run jota-produksi.yml -f shots="$d/shots.json"
             echo "Masuk antrean: $d"
           done
