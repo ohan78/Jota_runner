@@ -1,0 +1,83 @@
+# Antrean perintah berbasis file (owner 2026-11-07 09:34): ChatGPT mode chat cukup MENULIS gpt/perintah.json di repo
+# Jota_Content_Factory lewat koneksi GitHub; workflow ini mengecek setiap 10 menit dan menjalankan workflow yang diminta.
+# Aksi yang diizinkan: siapkan (brief -> shots.json), gambar (gambar awal), produksi (video ke Drive). Tidak ada posting publik.
+# Jeda login VideoExpress dijaga: perintah gambar/produksi ditahan bila ada run VideoExpress yang dimulai < 20 menit lalu
+# (run di slot yang sama diantrekan concurrency workflow). Hasil ditulis ke gpt/status-perintah.json.
+name: jota-perintah
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: jota-perintah
+  cancel-in-progress: false
+jobs:
+  perintah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          fetch-depth: 1
+      - name: Jalankan perintah berikutnya
+        env:
+          GH_RUNNER: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          F=gpt/perintah.json; S=gpt/status-perintah.json
+          [ -f "$F" ] || { echo "Belum ada $F"; exit 0; }
+          GH_TOKEN=$GH_RUNNER gh api "repos/$REPO/actions/runs?per_page=30" > /tmp/runs.json
+          node - <<'JS'
+          const fs = require('fs'); const { execFileSync } = require('child_process');
+          const F = 'gpt/perintah.json', S = 'gpt/status-perintah.json';
+          const p = JSON.parse(fs.readFileSync(F, 'utf8')); const list = Array.isArray(p) ? p : (p.perintah || []);
+          const runs = JSON.parse(fs.readFileSync('/tmp/runs.json', 'utf8')).workflow_runs || [];
+          const VX = ['jota-produksi', 'jota-gambar', 'jota-runner-uji', 'jota-youtube-status'];
+          const now = Date.now();
+          const vxRuns = runs.filter((r) => VX.includes(r.name));
+          const baruLogin = vxRuns.find((r) => now - Date.parse(r.run_started_at || r.created_at) < 20 * 60 * 1000);
+          const status = fs.existsSync(S) ? JSON.parse(fs.readFileSync(S, 'utf8')) : { perintah: {} };
+          status.diperbarui = new Date().toISOString();
+          status.run_terakhir = runs.slice(0, 12).map((r) => ({ id: r.id, nama: r.name, status: r.status, hasil: r.conclusion, mulai: r.created_at, url: r.html_url }));
+          const ok = /^(gpt\/productions|skills\/jota-video\/playbooks\/[a-z-]+\/productions)\/[A-Za-z0-9-]+$/;
+          let dijalankan = null;
+          for (const c of list) {
+            const id = String(c.id || ''); if (!id) continue;
+            const st = status.perintah[id];
+            if (st && st.tahap !== 'ditahan') continue;           // sudah dikerjakan atau ditolak
+            const folder = String(c.folder || '').replace(/\/(brief|shots)\.json$/, '').replace(/\/$/, '');
+            const slot = String(c.slot || '1');
+            const tolak = (alasan) => { status.perintah[id] = { tahap: 'ditolak', alasan, waktu: status.diperbarui }; };
+            if (!ok.test(folder)) { tolak('folder tidak diizinkan'); continue; }
+            if (!['1', '2', '3'].includes(slot)) { tolak('slot harus 1-3'); continue; }
+            let wf, args;
+            if (c.aksi === 'siapkan') { wf = 'jota-gpt-antre.yml'; args = ['-f', `folder=${folder}`, '-f', 'siapkan_saja=true']; }
+            else if (c.aksi === 'gambar') { wf = 'jota-gambar.yml'; args = ['-f', `shots=${folder}/shots.json`, '-f', `slot=${slot}`]; }
+            else if (c.aksi === 'produksi') { wf = 'jota-produksi.yml'; args = ['-f', `shots=${folder}/shots.json`, '-f', `slot=${slot}`, ...(c.sudah_terkirim ? ['-f', `sudah_terkirim=${c.sudah_terkirim}`] : [])]; }
+            else { tolak(`aksi "${c.aksi}" tidak diizinkan (hanya siapkan, gambar, produksi)`); continue; }
+            if (wf !== 'jota-gpt-antre.yml') {
+              // Slot yang sama diantrekan oleh concurrency group workflow; di sini hanya jeda login yang dijaga.
+              if (baruLogin) { status.perintah[id] = { tahap: 'ditahan', alasan: `jeda login VideoExpress (run ${baruLogin.name} ${baruLogin.created_at})`, waktu: status.diperbarui }; break; }
+            }
+            execFileSync('gh', ['workflow', 'run', wf, '-R', process.env.REPO, ...args], { stdio: 'inherit', env: { ...process.env, GH_TOKEN: process.env.GH_RUNNER } });
+            status.perintah[id] = { tahap: 'dijalankan', workflow: wf, folder, slot, waktu: status.diperbarui };
+            dijalankan = id; break;                               // satu perintah per putaran
+          }
+          fs.writeFileSync(S, JSON.stringify(status, null, 2) + '\n');
+          console.log(dijalankan ? `Dijalankan: ${dijalankan}` : 'Tidak ada perintah yang dijalankan putaran ini.');
+          JS
+      - name: Simpan status
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          git config user.name "JOTA Runner"; git config user.email "runner@jota.local"
+          git add gpt/status-perintah.json
+          git diff --cached --quiet && exit 0
+          git commit -qm "Status perintah GPT"
+          for i in 1 2 3; do git pull --rebase -q origin main && git push -q origin HEAD:main && break; sleep 5; done
