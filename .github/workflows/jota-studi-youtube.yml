@@ -26,7 +26,7 @@ jobs:
           CARI: ${{ inputs.cari }}
           VIDEO: ${{ inputs.video }}
         run: |
-          pip install -q -U yt-dlp
+          pip install -q -U "yt-dlp[default]"
           mkdir -p out/sub
           IFS='|' read -ra Q <<< "$CARI"
           for q in "${Q[@]}"; do
@@ -35,7 +35,7 @@ jobs:
             echo "=== $q" >> out/cari.tsv
           done
           for v in ${VIDEO//,/ }; do
-            yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs "en.*,id.*" --sub-format vtt --print-to-file "%(id)s	%(view_count)s	%(channel)s	%(title)s" out/video.tsv -o "out/sub/%(id)s.%(ext)s" "https://www.youtube.com/watch?v=$v" || echo "$v gagal" >> out/video.tsv
+            yt-dlp --extractor-args "youtube:player_client=tv_simply,mweb,web_embedded" --skip-download --write-auto-subs --write-subs --sub-langs "en.*,id.*" --sub-format vtt --print-to-file "%(id)s	%(view_count)s	%(channel)s	%(title)s" out/video.tsv -o "out/sub/%(id)s.%(ext)s" "https://www.youtube.com/watch?v=$v" || echo "$v gagal" >> out/video.tsv
           done
           ls -la out out/sub | head -80
           tar czf studi.tgz out
