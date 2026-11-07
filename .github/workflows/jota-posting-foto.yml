@@ -1,0 +1,45 @@
+# Posting foto feed (poster Hikmah Hadis) ke Facebook Page dan Instagram. Hanya dijalankan atas perintah owner.
+# folder berisi caption.json {"01": {"file": "hikmah-01.jpg", "caption": "..."}}; nomor = "01" atau "01,02".
+name: jota-posting-foto
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: 'folder poster di repo privat, misal skills/jota-video/playbooks/hikmah-hadis/FEED-20261107'
+        required: true
+      nomor:
+        description: 'nomor poster, misal 01 atau 01,02'
+        required: true
+      platform:
+        description: 'fb,ig'
+        required: false
+        default: 'fb,ig'
+permissions:
+  contents: read
+jobs:
+  posting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ohan78/Jota_Content_Factory
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Posting foto
+        env:
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          FOLDER: ${{ inputs.folder }}
+          NOMOR: ${{ inputs.nomor }}
+          PLAT: ${{ inputs.platform }}
+        run: |
+          GAGAL=0
+          for n in ${NOMOR//,/ }; do
+            node -e "const d=require('./'+process.env.FOLDER+'/caption.json')[process.argv[1]]; if(!d) process.exit(1); require('fs').writeFileSync('/tmp/cap.txt', d.caption); console.log(d.file)" "$n" > /tmp/file.txt || { echo "$n: tidak ada di caption.json"; GAGAL=1; continue; }
+            echo "== $n"
+            node apps/videoexpress-runner/upload-foto.mjs "$FOLDER/$(cat /tmp/file.txt)" /tmp/cap.txt "$PLAT" || GAGAL=1
+            sleep 20
+          done
+          exit $GAGAL
