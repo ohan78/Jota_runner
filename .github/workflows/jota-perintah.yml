@@ -40,13 +40,14 @@ jobs:
           const runs = JSON.parse(fs.readFileSync('/tmp/runs.json', 'utf8')).workflow_runs || [];
           const VX = ['jota-produksi', 'jota-gambar', 'jota-runner-uji', 'jota-youtube-status'];
           const now = Date.now();
-          const vxRuns = runs.filter((r) => VX.includes(r.name));
+          // Nama tampilan workflow bisa berganti (nama pos); cocokkan lewat nama file.
+          const vxRuns = runs.filter((r) => VX.some((v) => String(r.path || '').endsWith(`/${v}.yml`) || r.name === v));
           const baruLogin = vxRuns.find((r) => now - Date.parse(r.run_started_at || r.created_at) < 20 * 60 * 1000);
           const status = fs.existsSync(S) ? JSON.parse(fs.readFileSync(S, 'utf8')) : { perintah: {} };
           const lamaJson = JSON.stringify({ p: status.perintah, r: status.run_terakhir });
           status.diperbarui = new Date().toISOString();
           // Run jota-perintah sendiri tidak dicatat, supaya status hanya di-commit bila ada perubahan nyata.
-          status.run_terakhir = runs.filter((r) => r.name !== 'jota-perintah').slice(0, 12).map((r) => ({ id: r.id, nama: r.name, status: r.status, hasil: r.conclusion, mulai: r.created_at, url: r.html_url }));
+          status.run_terakhir = runs.filter((r) => !String(r.path || '').endsWith('/jota-perintah.yml')).slice(0, 12).map((r) => ({ id: r.id, nama: r.name, status: r.status, hasil: r.conclusion, mulai: r.created_at, url: r.html_url }));
           const ok = /^(gpt\/productions|skills\/jota-video\/playbooks\/[a-z-]+\/productions)\/[A-Za-z0-9-]+$/;
           let dijalankan = null;
           for (const c of list) {
