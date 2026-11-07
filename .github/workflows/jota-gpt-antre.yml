@@ -59,11 +59,19 @@ jobs:
             [ "$AUTO" = "true" ] || [ "$SIAPKAN" = "true" ] || { echo "$d: auto false, dilewati"; continue; }
             n=$((n+1))
             [ "$n" -le 1 ] || { echo "Lebih dari satu produksi auto dalam satu push; $d tidak dikirim."; continue; }
+            # 2026-11-07 (owner 19:57): hasil pemeriksaan ditulis ke $d/HASIL-CEK.txt dan di-commit, supaya ChatGPT bisa
+            # membaca alasan penolakan langsung dari repo lalu memperbaiki brief tanpa membuka log Actions.
+            LOG="$d/HASIL-CEK.txt"; : > "$LOG.isi"; ok=1
             if [ -f "$d/brief.json" ]; then
-              [ -f apps/videoexpress-runner/cek-brief.mjs ] && (cd apps/videoexpress-runner && node cek-brief.mjs "../../$d/brief.json")
-              (cd apps/videoexpress-runner && node dari-brief.mjs "../../$d/brief.json")
+              (cd apps/videoexpress-runner && node cek-brief.mjs "../../$d/brief.json") >>"$LOG.isi" 2>&1 || ok=0
+              [ "$ok" = 1 ] && { (cd apps/videoexpress-runner && node dari-brief.mjs "../../$d/brief.json") >>"$LOG.isi" 2>&1 || ok=0; }
             fi
-            (cd apps/videoexpress-runner && node runner.mjs plan "../../$d/shots.json")
+            [ "$ok" = 1 ] && { (cd apps/videoexpress-runner && node runner.mjs plan "../../$d/shots.json") >>"$LOG.isi" 2>&1 || ok=0; }
+            { [ "$ok" = 1 ] && echo "LOLOS $(date -u +%FT%TZ) - lanjut produksi" || echo "DITOLAK $(date -u +%FT%TZ) - perbaiki brief.json sesuai baris GAGAL/KESALAHAN/- di bawah, lalu kirim perintah buat dengan id baru"; echo; grep -v '^\s*at \|node:internal\|^Node.js' "$LOG.isi"; } > "$LOG"; rm -f "$LOG.isi"; cat "$LOG"
+            git config user.name "JOTA Runner"; git config user.email "runner@jota.local"
+            git add "$LOG"; git commit -qm "Hasil cek naskah ($d)" || true
+            for i in 1 2 3; do git pull --rebase -q origin main && git push -q origin HEAD:main && break; sleep 5; done
+            [ "$ok" = 1 ] || { [ "$ok" = 1 ] || git checkout -- "$d/shots.json" 2>/dev/null || true; exit 1; }
             if ! git diff --quiet -- "$d/shots.json" || ! git ls-files --error-unmatch "$d/shots.json" >/dev/null 2>&1; then
               git config user.name "JOTA Runner"; git config user.email "runner@jota.local"
               git add "$d/shots.json"; git commit -m "Antrean GPT: shots.json dibangun dari brief ($d)"
